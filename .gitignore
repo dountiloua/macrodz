@@ -1,0 +1,44 @@
+# Environment (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Expo / Metro
+.expo/
+.metro-health-check*
+dist/
+web-build/
+expo-env.d.ts
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+*.tsbuildinfo
+
+# Native builds
+android/
+ios/
+
+# Testing / coverage
+coverage/
+.jest-cache/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
