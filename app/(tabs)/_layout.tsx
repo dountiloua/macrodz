@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 import { useTranslation } from 'react-i18next';
+
+import { useProfileStore } from '@/store/profile-store';
 
 type TabBarIconProps = {
   name: ComponentProps<typeof Ionicons>['name'];
@@ -16,6 +18,16 @@ function TabBarIcon({ name, color, size }: TabBarIconProps) {
 
 export default function TabsLayout() {
   const { t } = useTranslation();
+  const hydrated = useProfileStore((state) => state.hydrated);
+  const profile = useProfileStore((state) => state.profile);
+
+  if (!hydrated) {
+    return null;
+  }
+
+  if (profile === null) {
+    return <Redirect href="/onboarding" />;
+  }
 
   return (
     <Tabs screenOptions={{ tabBarActiveTintColor: '#0f766e' }}>
