@@ -85,3 +85,17 @@ export function convertServing(
 
   return { ok: true, grams, kcal, protein, carbs, fat };
 }
+
+export function getAvailableServingUnits(product: ServingProduct): ServingUnit[] {
+  const hasServingQuantity =
+    product.servingQuantityG !== undefined &&
+    Number.isFinite(product.servingQuantityG) &&
+    product.servingQuantityG > 0;
+
+  return SERVING_UNITS.filter((unit) => {
+    if (unit === 'unit' || unit === 'pot') {
+      return hasServingQuantity;
+    }
+    return true;
+  });
+}

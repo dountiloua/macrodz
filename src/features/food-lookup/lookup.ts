@@ -17,7 +17,7 @@ export type LookupDependencies = {
 
 let defaultCachePromise: Promise<ProductCache> | null = null;
 
-function getDefaultCache(): Promise<ProductCache> {
+export function getDefaultCache(): Promise<ProductCache> {
   if (defaultCachePromise === null) {
     defaultCachePromise = import('./sqlite-cache').then(({ createSqliteProductCache }) =>
       createSqliteProductCache(),

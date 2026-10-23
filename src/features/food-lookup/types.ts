@@ -1,5 +1,7 @@
 import type { ServingProduct } from '../serving-units/types';
 
+export type ProductSource = 'off' | 'user';
+
 export type ParsedProduct = ServingProduct & {
   barcode: string;
   name: string;
@@ -7,6 +9,7 @@ export type ParsedProduct = ServingProduct & {
   servingSize?: string;
   countriesTags: string[];
   isLikelyAlgerian: boolean;
+  source?: ProductSource;
 };
 
 export type LookupError =

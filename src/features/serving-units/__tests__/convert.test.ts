@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 
 import { SERVING_UNITS, type ServingUnit } from '../constants';
-import { convertServing } from '../convert';
+import { convertServing, getAvailableServingUnits } from '../convert';
 import type { ServingConversionResult, ServingConversionSuccess, ServingProduct } from '../types';
 
 const milk: ServingProduct = {
@@ -221,6 +221,29 @@ describe('convertServing', () => {
           }
         }
       }
+    });
+  });
+
+  describe('getAvailableServingUnits', () => {
+    it('includes unit and pot when product has valid servingQuantityG', () => {
+      const units = getAvailableServingUnits(yogurtPot);
+      expect(units).toContain('unit');
+      expect(units).toContain('pot');
+      expect(units).toEqual(SERVING_UNITS);
+    });
+
+    it('excludes unit and pot when servingQuantityG is undefined', () => {
+      const units = getAvailableServingUnits(milk);
+      expect(units).not.toContain('unit');
+      expect(units).not.toContain('pot');
+      expect(units).toEqual(['g', 'ml', 'tbsp', 'tsp', 'glass', 'cup']);
+    });
+
+    it('excludes unit and pot when servingQuantityG is zero or negative', () => {
+      expect(getAvailableServingUnits({ ...yogurtPot, servingQuantityG: 0 })).not.toContain('unit');
+      expect(getAvailableServingUnits({ ...yogurtPot, servingQuantityG: -10 })).not.toContain(
+        'unit',
+      );
     });
   });
 });

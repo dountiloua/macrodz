@@ -16,9 +16,22 @@ export {
 } from './constants';
 export { fetchOpenFoodFactsProduct } from './client';
 export type { OpenFoodFactsClientOptions } from './client';
-export { lookupProduct } from './lookup';
+export { classifyLookupError } from './error-mapping';
+export type {
+  ClassifiedErrorType,
+  ErrorClassification,
+  ScanErrorMessageKey,
+} from './error-mapping';
+export { getDefaultCache, lookupProduct } from './lookup';
 export type { LookupDependencies } from './lookup';
+export { saveManualProduct, validateManualProduct } from './manual-product';
+export type {
+  ManualProductInput,
+  ManualProductValidationErrors,
+  ManualProductValidationResult,
+} from './manual-product';
 export { parseOpenFoodFactsProduct, parseServingSizeG } from './parser';
+export { DEFAULT_SCAN_COOLDOWN_MS, shouldAcceptBarcode } from './scan-throttle';
 export type {
   CachedLookup,
   FetchInit,
@@ -33,4 +46,5 @@ export type {
   ParsedProduct,
   ParseResult,
   ProductCache,
+  ProductSource,
 } from './types';

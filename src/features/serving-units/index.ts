@@ -5,7 +5,7 @@ export {
   VOLUME_UNIT_ML,
 } from './constants';
 export type { ServingUnit } from './constants';
-export { convertServing } from './convert';
+export { convertServing, getAvailableServingUnits } from './convert';
 export type {
   ServingConversionErrorCode,
   ServingConversionFailure,
