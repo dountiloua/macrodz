@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
+import { useAuthStore } from '@/store/auth-store';
 import { useProfileStore } from '@/store/profile-store';
 
 type TabBarIconProps = {
@@ -18,11 +19,17 @@ function TabBarIcon({ name, color, size }: TabBarIconProps) {
 
 export default function TabsLayout() {
   const { t } = useTranslation();
+  const authInitialized = useAuthStore((state) => state.initialized);
+  const session = useAuthStore((state) => state.session);
   const hydrated = useProfileStore((state) => state.hydrated);
   const profile = useProfileStore((state) => state.profile);
 
-  if (!hydrated) {
+  if (!authInitialized || !hydrated) {
     return null;
+  }
+
+  if (session === null) {
+    return <Redirect href="/login" />;
   }
 
   if (profile === null) {
