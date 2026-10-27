@@ -1,16 +1,23 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { colors, fontFamilies } from '@/theme/tokens';
+
 type MetricRowProps = {
   label: string;
   value: string;
   highlight?: boolean;
+  dark?: boolean;
 };
 
-export function MetricRow({ label, value, highlight = false }: MetricRowProps) {
+export function MetricRow({ label, value, highlight = false, dark = false }: MetricRowProps) {
   return (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={[styles.value, highlight ? styles.highlight : null]}>{value}</Text>
+    <View style={[styles.row, dark ? styles.darkRow : null]}>
+      <Text style={[styles.label, dark ? styles.darkLabel : null]}>{label}</Text>
+      <Text
+        style={[styles.value, dark ? styles.darkValue : null, highlight ? styles.highlight : null]}
+      >
+        {value}
+      </Text>
     </View>
   );
 }
@@ -34,7 +41,18 @@ const styles = StyleSheet.create({
     color: '#0f172a',
   },
   highlight: {
-    color: '#0f766e',
+    color: '#ffffff',
     fontSize: 19,
+  },
+  darkRow: {
+    borderBottomColor: colors.border,
+  },
+  darkLabel: {
+    color: colors.muted,
+    fontFamily: fontFamilies.regular,
+  },
+  darkValue: {
+    color: colors.text,
+    fontFamily: fontFamilies.medium,
   },
 });

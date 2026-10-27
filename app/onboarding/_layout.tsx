@@ -1,5 +1,6 @@
 import { Redirect, Stack } from 'expo-router';
 
+import { colors } from '@/theme/tokens';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function OnboardingLayout() {
@@ -18,7 +19,7 @@ export default function OnboardingLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: '#f8fafc' },
+        contentStyle: { backgroundColor: colors.background },
       }}
     />
   );

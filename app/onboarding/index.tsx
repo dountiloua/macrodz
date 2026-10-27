@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { StatusBar } from 'expo-status-bar';
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,12 +13,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { LabeledInput } from '@/components/labeled-input';
-import { OptionButton } from '@/components/option-button';
-import { PrimaryButton } from '@/components/primary-button';
-import { ProgressBar } from '@/components/progress-bar';
+import { Button } from '@/components/ui/Button';
+import { InfoCallout } from '@/components/ui/InfoCallout';
+import { OptionCard } from '@/components/ui/OptionCard';
+import { ProgressBar } from '@/components/ui/ProgressBar';
+import { Screen } from '@/components/ui/Screen';
+import { TextField } from '@/components/ui/TextField';
+import { buttonHaptic } from '@/components/ui/haptics';
+import { colors, fontFamilies, radii, spacing, typography } from '@/theme/tokens';
 import {
   ONBOARDING_LIMITS,
   validateNumericField,
@@ -49,35 +54,13 @@ function numericValue(field: NumericField, raw: string): number | null {
   return result.valid ? result.value : null;
 }
 
-type TrainingDayButtonProps = {
-  day: number;
-  selected: boolean;
-  onPress: () => void;
-};
-
-function TrainingDayButton({ day, selected, onPress }: TrainingDayButtonProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.day,
-        selected ? styles.daySelected : null,
-        pressed ? styles.dayPressed : null,
-      ]}
-    >
-      <Text style={[styles.dayLabel, selected ? styles.dayLabelSelected : null]}>{day}</Text>
-    </Pressable>
-  );
-}
-
 export default function OnboardingScreen() {
   const { t } = useTranslation();
   const router = useRouter();
 
   const [stepIndex, setStepIndex] = useState(0);
   const step = STEPS[stepIndex] ?? 'gender';
+  const [transition] = useState(() => new Animated.Value(1));
 
   const [gender, setGender] = useState<Gender | null>(null);
   const [ageInput, setAgeInput] = useState('');
@@ -102,17 +85,24 @@ export default function OnboardingScreen() {
   };
 
   const currentInput = numericInputs[step];
-
   let errorMessage: string | null = null;
 
-  if (currentInput && currentInput.raw.trim().length > 0) {
-    const result = currentInput.result;
-
-    if (!result.valid) {
-      const limits = ONBOARDING_LIMITS[currentInput.field];
-      errorMessage = t(VALIDATION_KEYS[result.code], { min: limits.min, max: limits.max });
-    }
+  if (currentInput && currentInput.raw.trim().length > 0 && !currentInput.result.valid) {
+    const limits = ONBOARDING_LIMITS[currentInput.field];
+    errorMessage = t(VALIDATION_KEYS[currentInput.result.code], {
+      min: limits.min,
+      max: limits.max,
+    });
   }
+
+  useEffect(() => {
+    transition.setValue(0);
+    Animated.timing(transition, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+  }, [stepIndex, transition]);
 
   function isStepValid(): boolean {
     switch (step) {
@@ -167,6 +157,11 @@ export default function OnboardingScreen() {
     setStepIndex((current) => Math.max(0, current - 1));
   }
 
+  function handleBack() {
+    buttonHaptic();
+    goBack();
+  }
+
   function skipBodyFat() {
     if (step !== 'bodyFat') {
       return;
@@ -212,17 +207,40 @@ export default function OnboardingScreen() {
     });
   }
 
+  function renderNumericField(
+    field: 'age' | 'height' | 'weight' | 'bodyFat',
+    value: string,
+    onChangeText: (nextValue: string) => void,
+    unit: string,
+  ) {
+    return (
+      <TextField
+        label={unit}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={t(`onboarding.${field}.placeholder`)}
+        error={errorMessage}
+        keyboardType="decimal-pad"
+        inputMode="decimal"
+        returnKeyType="done"
+        onSubmitEditing={goNext}
+      />
+    );
+  }
+
   function renderBody() {
     switch (step) {
       case 'gender':
         return (
           <View style={styles.options}>
-            <OptionButton
+            <OptionCard
+              icon="male-outline"
               label={t('onboarding.gender.male')}
               selected={gender === 'male'}
               onPress={() => setGender('male')}
             />
-            <OptionButton
+            <OptionCard
+              icon="female-outline"
               label={t('onboarding.gender.female')}
               selected={gender === 'female'}
               onPress={() => setGender('female')}
@@ -230,42 +248,22 @@ export default function OnboardingScreen() {
           </View>
         );
       case 'age':
-        return (
-          <LabeledInput
-            value={ageInput}
-            onChangeText={setAgeInput}
-            placeholder={t('onboarding.age.placeholder')}
-            unit={t('common.units.years')}
-          />
-        );
+        return renderNumericField('age', ageInput, setAgeInput, t('common.units.years'));
       case 'height':
-        return (
-          <LabeledInput
-            value={heightInput}
-            onChangeText={setHeightInput}
-            placeholder={t('onboarding.height.placeholder')}
-            unit={t('common.units.cm')}
-          />
-        );
+        return renderNumericField('height', heightInput, setHeightInput, t('common.units.cm'));
       case 'weight':
-        return (
-          <LabeledInput
-            value={weightInput}
-            onChangeText={setWeightInput}
-            placeholder={t('onboarding.weight.placeholder')}
-            unit={t('common.units.kg')}
-          />
-        );
+        return renderNumericField('weight', weightInput, setWeightInput, t('common.units.kg'));
       case 'bodyFat':
         return (
           <View style={styles.options}>
-            <LabeledInput
-              value={bodyFatInput}
-              onChangeText={setBodyFatInput}
-              placeholder={t('onboarding.bodyFat.placeholder')}
-              unit={t('common.units.percent')}
-            />
-            <PrimaryButton
+            <InfoCallout message={t('onboarding.bodyFat.subtitle')} />
+            {renderNumericField(
+              'bodyFat',
+              bodyFatInput,
+              setBodyFatInput,
+              t('common.units.percent'),
+            )}
+            <Button
               label={t('onboarding.bodyFat.skip')}
               variant="secondary"
               onPress={skipBodyFat}
@@ -276,11 +274,13 @@ export default function OnboardingScreen() {
         return (
           <View style={styles.daysGrid}>
             {TRAINING_DAYS.map((day) => (
-              <TrainingDayButton
+              <OptionCard
                 key={day}
-                day={day}
+                icon="barbell-outline"
+                label={String(day)}
                 selected={trainingDays === day}
                 onPress={() => setTrainingDays(day)}
+                style={styles.dayCard}
               />
             ))}
           </View>
@@ -288,19 +288,22 @@ export default function OnboardingScreen() {
       case 'goal':
         return (
           <View style={styles.options}>
-            <OptionButton
+            <OptionCard
+              icon="trending-down-outline"
               label={t('onboarding.goal.cut')}
               subtitle={t('onboarding.goal.cutHint')}
               selected={goal === 'cut'}
               onPress={() => setGoal('cut')}
             />
-            <OptionButton
+            <OptionCard
+              icon="remove-outline"
               label={t('onboarding.goal.maintain')}
               subtitle={t('onboarding.goal.maintainHint')}
               selected={goal === 'maintain'}
               onPress={() => setGoal('maintain')}
             />
-            <OptionButton
+            <OptionCard
+              icon="trending-up-outline"
               label={t('onboarding.goal.leanBulk')}
               subtitle={t('onboarding.goal.leanBulkHint')}
               selected={goal === 'lean_bulk'}
@@ -314,7 +317,8 @@ export default function OnboardingScreen() {
   const content = stepContent();
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <Screen padding={spacing[4]}>
+      <StatusBar style="light" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
@@ -324,11 +328,10 @@ export default function OnboardingScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('common.back')}
-              onPress={goBack}
-              hitSlop={12}
+              onPress={handleBack}
               style={styles.backButton}
             >
-              <Ionicons name="chevron-back" size={22} color="#0f172a" />
+              <Ionicons name="chevron-back" size={22} color={colors.text} />
             </Pressable>
           ) : (
             <View style={styles.backButton} />
@@ -343,113 +346,104 @@ export default function OnboardingScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.heading}>
-            <Text style={styles.title}>{content.title}</Text>
-            {content.subtitle ? <Text style={styles.subtitle}>{content.subtitle}</Text> : null}
-          </View>
-
-          {renderBody()}
-
-          {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+          <Animated.View
+            style={[
+              styles.stepContent,
+              {
+                opacity: transition,
+                transform: [
+                  {
+                    translateY: transition.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [8, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.heading}>
+              <Text style={styles.title}>{content.title}</Text>
+              {content.subtitle && step !== 'bodyFat' ? (
+                <Text style={styles.subtitle}>{content.subtitle}</Text>
+              ) : null}
+            </View>
+            {renderBody()}
+          </Animated.View>
         </ScrollView>
 
         <View style={styles.footer}>
-          <PrimaryButton label={t('common.next')} onPress={goNext} disabled={!canContinue} />
+          <Button label={t('common.next')} onPress={goNext} disabled={!canContinue} />
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
   flex: {
     flex: 1,
   },
   header: {
+    minHeight: 56,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 16,
+    alignItems: 'center',
+    gap: spacing[3],
+    paddingBottom: spacing[4],
   },
   backButton: {
-    width: 36,
-    height: 36,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: radii[12],
+    backgroundColor: colors.surface,
   },
   progressWrap: {
     flex: 1,
-    paddingTop: 8,
+    paddingHorizontal: spacing[2],
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    gap: 24,
+    paddingTop: spacing[4],
+    paddingBottom: spacing[4],
+  },
+  stepContent: {
+    gap: spacing[8],
   },
   heading: {
-    gap: 8,
+    gap: spacing[2],
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0f172a',
-    letterSpacing: -0.5,
+    color: colors.text,
+    fontFamily: fontFamilies.bold,
+    fontSize: typography.title,
+    lineHeight: 36,
   },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 21,
-    color: '#64748b',
+    color: colors.muted,
+    fontFamily: fontFamilies.regular,
+    fontSize: typography.body,
+    lineHeight: 24,
   },
   options: {
-    gap: 12,
+    gap: spacing[3],
   },
   daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: spacing[2],
   },
-  day: {
-    flexBasis: '22%',
-    flexGrow: 1,
-    height: 56,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
+  dayCard: {
+    flexBasis: '48%',
+    minHeight: 64,
+    paddingHorizontal: spacing[2],
     justifyContent: 'center',
   },
-  daySelected: {
-    borderColor: '#0f766e',
-    backgroundColor: '#ecfdf5',
-  },
-  dayPressed: {
-    opacity: 0.85,
-  },
-  dayLabel: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: '#0f172a',
-  },
-  dayLabelSelected: {
-    color: '#0f766e',
-  },
-  error: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#b91c1c',
-  },
   footer: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: '#f8fafc',
+    paddingTop: spacing[3],
+    paddingBottom: spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
 });

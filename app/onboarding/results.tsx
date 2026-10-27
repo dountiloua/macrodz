@@ -1,11 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MetricRow } from '@/components/metric-row';
-import { PrimaryButton } from '@/components/primary-button';
+import { buttonHaptic } from '@/components/ui/haptics';
+import { Button } from '@/components/ui/Button';
+import { Screen } from '@/components/ui/Screen';
+import { colors, fontFamilies, radii, spacing, typography } from '@/theme/tokens';
 import {
   calculateNutritionPlan,
   validateNumericField,
@@ -111,17 +114,22 @@ export default function ResultsScreen() {
     router.replace('/diary');
   }
 
+  function handleBack() {
+    buttonHaptic();
+    router.back();
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <Screen padding={spacing[4]}>
+      <StatusBar style="light" />
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}
-          onPress={() => router.back()}
-          hitSlop={12}
+          onPress={handleBack}
           style={styles.backButton}
         >
-          <Ionicons name="chevron-back" size={22} color="#0f172a" />
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
       </View>
 
@@ -132,12 +140,17 @@ export default function ResultsScreen() {
         </View>
 
         <View style={styles.card}>
-          <MetricRow label={t('results.bmr')} value={`${plan.bmr} ${kcal}`} />
-          <MetricRow label={t('results.tdee')} value={`${plan.tdee} ${kcal}`} />
-          <MetricRow label={t('results.calories')} value={`${plan.calories} ${kcal}`} highlight />
-          <MetricRow label={t('results.protein')} value={`${plan.proteinG} ${grams}`} />
-          <MetricRow label={t('results.carbs')} value={`${plan.carbsG} ${grams}`} />
-          <MetricRow label={t('results.fat')} value={`${plan.fatG} ${grams}`} />
+          <MetricRow label={t('results.bmr')} value={`${plan.bmr} ${kcal}`} dark />
+          <MetricRow label={t('results.tdee')} value={`${plan.tdee} ${kcal}`} dark />
+          <MetricRow
+            label={t('results.calories')}
+            value={`${plan.calories} ${kcal}`}
+            highlight
+            dark
+          />
+          <MetricRow label={t('results.protein')} value={`${plan.proteinG} ${grams}`} dark />
+          <MetricRow label={t('results.carbs')} value={`${plan.carbsG} ${grams}`} dark />
+          <MetricRow label={t('results.fat')} value={`${plan.fatG} ${grams}`} dark />
         </View>
 
         {plan.warnings.length > 0 ? (
@@ -154,96 +167,90 @@ export default function ResultsScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <PrimaryButton label={t('results.save')} onPress={handleSave} />
-        <PrimaryButton
-          label={t('common.editAnswers')}
-          variant="secondary"
-          onPress={() => router.back()}
-        />
+        <Button label={t('results.save')} onPress={handleSave} />
+        <Button label={t('common.editAnswers')} variant="secondary" onPress={() => router.back()} />
       </View>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  backButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
+    minHeight: 56,
     justifyContent: 'center',
   },
+  backButton: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii[12],
+    backgroundColor: colors.surface,
+  },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 24,
-    gap: 20,
+    flexGrow: 1,
+    paddingTop: spacing[4],
+    paddingBottom: spacing[6],
+    gap: spacing[6],
   },
   heading: {
-    gap: 8,
+    gap: spacing[2],
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0f172a',
-    letterSpacing: -0.5,
+    color: colors.text,
+    fontFamily: fontFamilies.bold,
+    fontSize: typography.title,
+    lineHeight: 36,
   },
   subtitle: {
-    fontSize: 15,
-    lineHeight: 21,
-    color: '#64748b',
+    color: colors.muted,
+    fontFamily: fontFamilies.regular,
+    fontSize: typography.body,
+    lineHeight: 24,
   },
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
+    paddingHorizontal: spacing[4],
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 18,
+    borderColor: colors.border,
+    borderRadius: radii[16],
+    backgroundColor: colors.surface,
   },
   warnings: {
-    backgroundColor: '#fffbeb',
-    borderRadius: 16,
+    gap: spacing[3],
+    padding: spacing[4],
     borderWidth: 1,
-    borderColor: '#fde68a',
-    padding: 16,
-    gap: 10,
+    borderColor: colors.border,
+    borderRadius: radii[16],
+    backgroundColor: colors.surface,
   },
   warningsTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#92400e',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: colors.text,
+    fontFamily: fontFamilies.bold,
+    fontSize: typography.caption,
   },
   warningRow: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'flex-start',
+    gap: spacing[3],
   },
   warningDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#d97706',
-    marginTop: 8,
+    width: 7,
+    height: 7,
+    marginTop: 7,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
   },
   warningText: {
     flex: 1,
-    fontSize: 14,
+    color: colors.muted,
+    fontFamily: fontFamilies.regular,
+    fontSize: typography.caption,
     lineHeight: 20,
-    color: '#78350f',
   },
   footer: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 10,
-    backgroundColor: '#f8fafc',
+    gap: spacing[3],
+    paddingTop: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
 });
