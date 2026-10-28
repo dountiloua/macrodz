@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Goal, NutritionPlan } from '../nutrition-calc';
 import { supabase } from '@/lib/supabase';
 import type { Profile } from '@/store/profile-store';
+import { useProfileStore } from '@/store/profile-store';
 import type { DbProfileRow } from './types';
 
 export function mapLocalProfileToDb(
@@ -12,15 +13,13 @@ export function mapLocalProfileToDb(
   now: Date = new Date(),
 ): DbProfileRow {
   const birthYear = now.getFullYear() - profile.age;
-  const dbGoal = profile.goal === 'leanBulk' ? 'lean_bulk' : profile.goal;
-
   return {
     id: userId,
     gender: profile.gender,
     birth_year: birthYear,
     height_cm: profile.heightCm,
     weight_kg: profile.weightKg,
-    goal: dbGoal,
+    goal: profile.goal,
     training_days: profile.trainingDaysPerWeek,
     body_fat_pct: profile.bodyFatPercent ?? null,
     target_kcal: targets.calories,
@@ -37,7 +36,7 @@ export function mapDbProfileToLocal(
   now: Date = new Date(),
 ): { profile: Profile; targets: NutritionPlan } {
   const age = Math.max(18, now.getFullYear() - row.birth_year);
-  const goal: Goal = row.goal === 'lean_bulk' ? 'leanBulk' : (row.goal as Goal);
+  const goal: Goal = row.goal;
 
   const profile: Profile = {
     gender: row.gender,
@@ -52,6 +51,7 @@ export function mapDbProfileToLocal(
   const targets: NutritionPlan = {
     bmr: row.target_bmr_kcal ?? 0,
     tdee: row.target_tdee_kcal ?? 0,
+    bmrFormula: row.body_fat_pct === null ? 'mifflin-st-jeor' : 'katch-mcardle',
     calories: Number(row.target_kcal),
     proteinG: Number(row.target_protein_g),
     carbsG: Number(row.target_carbs_g),
@@ -83,6 +83,17 @@ export async function syncProfileToSupabase(
       error: err instanceof Error ? err.message : 'Unknown synchronization error',
     };
   }
+}
+
+export async function syncProfileAndUpdatePending(
+  profile: Profile,
+  targets: NutritionPlan,
+  userId: string,
+  client: SupabaseClient = supabase,
+): Promise<{ ok: boolean; error?: string }> {
+  const result = await syncProfileToSupabase(profile, targets, userId, client);
+  useProfileStore.getState().setPendingSync(!result.ok, userId);
+  return result;
 }
 
 export async function fetchProfileFromSupabase(

@@ -4,6 +4,7 @@ export {
   fetchProfileFromSupabase,
   mapDbProfileToLocal,
   mapLocalProfileToDb,
+  syncProfileAndUpdatePending,
   syncProfileToSupabase,
 } from './sync-profile';
 export type {

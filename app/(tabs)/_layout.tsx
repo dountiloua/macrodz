@@ -23,6 +23,7 @@ export default function TabsLayout() {
   const session = useAuthStore((state) => state.session);
   const hydrated = useProfileStore((state) => state.hydrated);
   const profile = useProfileStore((state) => state.profile);
+  const profileUserId = useProfileStore((state) => state.userId);
 
   if (!authInitialized || !hydrated) {
     return null;
@@ -30,6 +31,10 @@ export default function TabsLayout() {
 
   if (session === null) {
     return <Redirect href="/login" />;
+  }
+
+  if (profileUserId !== session.user.id) {
+    return null;
   }
 
   if (profile === null) {

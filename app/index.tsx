@@ -9,6 +9,7 @@ export default function Index() {
   const session = useAuthStore((state) => state.session);
   const hydrated = useProfileStore((state) => state.hydrated);
   const profile = useProfileStore((state) => state.profile);
+  const profileUserId = useProfileStore((state) => state.userId);
 
   if (!authInitialized || !hydrated) {
     return (
@@ -20,6 +21,14 @@ export default function Index() {
 
   if (!session) {
     return <Redirect href="/login" />;
+  }
+
+  if (profileUserId !== session.user.id) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#0f766e" />
+      </View>
+    );
   }
 
   return <Redirect href={profile ? '/diary' : '/onboarding'} />;

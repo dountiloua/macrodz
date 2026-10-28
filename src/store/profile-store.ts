@@ -14,37 +14,124 @@ export type Profile = {
   goal: Goal;
 };
 
+type StoredProfile = {
+  profile: Profile;
+  targets: NutritionPlan;
+  pendingSync: boolean;
+};
+
 type ProfileState = {
   hydrated: boolean;
+  userId: string | null;
   profile: Profile | null;
   targets: NutritionPlan | null;
-  saveProfile: (profile: Profile, targets: NutritionPlan) => void;
+  pendingSync: boolean;
+  profilesByUserId: Record<string, StoredProfile>;
+  setUserId: (userId: string | null) => void;
+  saveProfile: (
+    profile: Profile,
+    targets: NutritionPlan,
+    userId: string,
+    pendingSync?: boolean,
+  ) => void;
+  setPendingSync: (pendingSync: boolean, userId?: string) => void;
   resetProfile: () => void;
   markHydrated: () => void;
 };
 
+let resolveHydration: () => void = () => {};
+const hydrationComplete = new Promise<void>((resolve) => {
+  resolveHydration = resolve;
+});
+
+export function waitForProfileHydration(): Promise<void> {
+  if (useProfileStore.getState().hydrated) {
+    return Promise.resolve();
+  }
+
+  return hydrationComplete;
+}
+
 export const useProfileStore = create<ProfileState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       hydrated: false,
+      userId: null,
       profile: null,
       targets: null,
-      saveProfile: (profile, targets) => set({ profile, targets }),
-      resetProfile: () => set({ profile: null, targets: null }),
-      markHydrated: () => set({ hydrated: true }),
-    }),
-    {
-      name: 'macro-dz-profile',
-      version: 1,
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ profile: state.profile, targets: state.targets }),
-      onRehydrateStorage: () => (state, error) => {
-        if (error) {
-          useProfileStore.setState({ hydrated: true });
+      pendingSync: false,
+      profilesByUserId: {},
+      setUserId: (userId) => {
+        const stored = userId ? get().profilesByUserId[userId] : undefined;
+        set({
+          userId,
+          profile: stored?.profile ?? null,
+          targets: stored?.targets ?? null,
+          pendingSync: stored?.pendingSync ?? false,
+        });
+      },
+      saveProfile: (profile, targets, userId, pendingSync = false) => {
+        const storedProfile = { profile, targets, pendingSync };
+        set((state) => ({
+          userId,
+          profile,
+          targets,
+          pendingSync,
+          profilesByUserId: {
+            ...state.profilesByUserId,
+            [userId]: storedProfile,
+          },
+        }));
+      },
+      setPendingSync: (pendingSync, userId) => {
+        const state = get();
+        const targetUserId = userId ?? state.userId;
+        if (!targetUserId) {
           return;
         }
 
-        state?.markHydrated();
+        const stored = state.profilesByUserId[targetUserId];
+        if (!stored) {
+          return;
+        }
+
+        const updated = { ...stored, pendingSync };
+        set({
+          profilesByUserId: {
+            ...state.profilesByUserId,
+            [targetUserId]: updated,
+          },
+          ...(state.userId === targetUserId ? { pendingSync } : {}),
+        });
+      },
+      resetProfile: () => {
+        set({
+          userId: null,
+          profile: null,
+          targets: null,
+          pendingSync: false,
+          profilesByUserId: {},
+        });
+      },
+      markHydrated: () => {
+        set({ hydrated: true });
+        resolveHydration();
+      },
+    }),
+    {
+      name: 'macro-dz-profile',
+      version: 2,
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ profilesByUserId: state.profilesByUserId }),
+      migrate: () => ({ profilesByUserId: {} }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.warn('Unable to hydrate the persisted profile store.', error);
+          useProfileStore.getState().markHydrated();
+          return;
+        }
+
+        (state ?? useProfileStore.getState()).markHydrated();
       },
     },
   ),

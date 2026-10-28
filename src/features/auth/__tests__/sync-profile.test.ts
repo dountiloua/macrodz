@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { NutritionPlan } from '../../nutrition-calc';
@@ -11,6 +11,16 @@ import {
 } from '../sync-profile';
 import type { DbProfileRow } from '../types';
 
+jest.mock('@/lib/supabase', () => ({ supabase: {} }));
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: {
+    getItem: jest.fn(async () => null),
+    setItem: jest.fn(async () => undefined),
+    removeItem: jest.fn(async () => undefined),
+  },
+}));
+
 describe('syncProfile', () => {
   const fixedDate = new Date(2026, 0, 1); // 2026
 
@@ -21,12 +31,13 @@ describe('syncProfile', () => {
     weightKg: 75,
     bodyFatPercent: 15,
     trainingDaysPerWeek: 4,
-    goal: 'leanBulk',
+    goal: 'lean_bulk',
   };
 
   const localTargets: NutritionPlan = {
     bmr: 1720,
     tdee: 2666,
+    bmrFormula: 'katch-mcardle',
     calories: 2933,
     proteinG: 150,
     carbsG: 418,
@@ -90,6 +101,7 @@ describe('syncProfile', () => {
     expect(targets).toEqual({
       bmr: 1350,
       tdee: 1850,
+      bmrFormula: 'mifflin-st-jeor',
       calories: 1600,
       proteinG: 132,
       carbsG: 148,

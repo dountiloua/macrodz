@@ -121,6 +121,19 @@ describe('auth validation', () => {
       });
     });
 
+    it('rejects invalid email addresses and passwords shorter than 8 characters', () => {
+      expect(
+        validateSignUpForm({
+          email: 'not-an-email',
+          password: 'short',
+          passwordConfirmation: 'short',
+        }),
+      ).toEqual({
+        ok: false,
+        errors: { email: 'INVALID_FORMAT', password: 'TOO_SHORT' },
+      });
+    });
+
     it('catches password confirmation mismatch', () => {
       const result = validateSignUpForm({
         email: 'user@example.com',
@@ -130,6 +143,19 @@ describe('auth validation', () => {
       expect(result).toEqual({
         ok: false,
         errors: { passwordConfirmation: 'DOES_NOT_MATCH' },
+      });
+    });
+
+    it('requires a password confirmation', () => {
+      expect(
+        validateSignUpForm({
+          email: 'user@example.com',
+          password: 'password123',
+          passwordConfirmation: '',
+        }),
+      ).toEqual({
+        ok: false,
+        errors: { passwordConfirmation: 'REQUIRED' },
       });
     });
   });

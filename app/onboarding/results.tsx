@@ -15,6 +15,8 @@ import {
   type MacroWarning,
   type NumericField,
 } from '@/features/nutrition-calc';
+import { syncProfileAndUpdatePending } from '@/features/auth/sync-profile';
+import { useAuthStore } from '@/store/auth-store';
 import { useProfileStore, type Profile } from '@/store/profile-store';
 
 type ResultsParams = {
@@ -93,6 +95,7 @@ export default function ResultsScreen() {
   const params = useLocalSearchParams<ResultsParams>();
   const { t } = useTranslation();
   const router = useRouter();
+  const user = useAuthStore((state) => state.user);
   const saveProfile = useProfileStore((state) => state.saveProfile);
 
   const profile = parseProfile(params);
@@ -106,12 +109,23 @@ export default function ResultsScreen() {
   const grams = t('common.units.g');
 
   function handleSave() {
-    if (profile === null) {
+    if (profile === null || user === null) {
       return;
     }
 
-    saveProfile(profile, plan);
+    saveProfile(profile, plan, user.id);
+    const syncRequest = syncProfileAndUpdatePending(profile, plan, user.id);
     router.replace('/diary');
+    void syncRequest.then((result) => {
+      if (!result.ok) {
+        console.warn('Profile saved locally; cloud sync is pending.', result.error);
+      }
+    });
+  }
+
+  function handleBack() {
+    buttonHaptic();
+    router.back();
   }
 
   function handleBack() {
