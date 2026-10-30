@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,7 +20,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MetricRow } from '@/components/metric-row';
-import { PrimaryButton } from '@/components/primary-button';
+import { Button } from '@/components/ui/Button';
+import { Screen } from '@/components/ui/Screen';
+import { TextField } from '@/components/ui/TextField';
 import {
   classifyLookupError,
   lookupProduct,
@@ -32,10 +35,23 @@ import {
   type ParsedProduct,
 } from '@/features/food-lookup';
 import {
+  buildLogFoodParams,
+  findProductIdByBarcode,
+  getNutritionPer100g,
+  insertUserProduct,
+  hasUsableNutrition,
+  readSingleParam,
+  toLocalDateString,
+  type Meal,
+} from '@/features/diary';
+import { MEALS } from '@/features/diary/types';
+import { useAuthStore } from '@/store/auth-store';
+import {
   convertServing,
   getAvailableServingUnits,
   type ServingUnit,
 } from '@/features/serving-units';
+import { colors, fontFamilies, radii, spacing, typography } from '@/theme/tokens';
 
 type ViewMode = 'scanning' | 'loading' | 'product' | 'error' | 'manual_form';
 
@@ -47,6 +63,13 @@ type LastScanState = {
 export default function ScanScreen() {
   const { t } = useTranslation();
   const router = useRouter();
+  const params = useLocalSearchParams<{ diary?: string; date?: string; meal?: string }>();
+  const diaryFlow = readSingleParam(params.diary) === 'true';
+  const logDate = readSingleParam(params.date) ?? toLocalDateString(new Date());
+  const mealParam = readSingleParam(params.meal);
+  const meal: Meal =
+    mealParam && (MEALS as readonly string[]).includes(mealParam) ? (mealParam as Meal) : 'snack';
+  const user = useAuthStore((state) => state.user);
   const [permission, requestPermission] = useCameraPermissions();
 
   const [mode, setMode] = useState<ViewMode>('scanning');
@@ -56,7 +79,9 @@ export default function ScanScreen() {
   // Lookup state
   const [currentBarcode, setCurrentBarcode] = useState('');
   const [product, setProduct] = useState<ParsedProduct | null>(null);
+  const [imageFailed, setImageFailed] = useState(false);
   const [errorInfo, setErrorInfo] = useState<ErrorClassification | null>(null);
+  const [productIdLookupFailed, setProductIdLookupFailed] = useState(false);
 
   // Manual barcode modal
   const [manualBarcodeModalVisible, setManualBarcodeModalVisible] = useState(false);
@@ -79,6 +104,7 @@ export default function ScanScreen() {
     servingQuantityG: '',
   });
   const [formErrors, setFormErrors] = useState<ManualProductValidationErrors>({});
+  const [manualNutritionError, setManualNutritionError] = useState(false);
   const [isSavingManual, setIsSavingManual] = useState(false);
 
   const resetToScanner = () => {
@@ -87,8 +113,25 @@ export default function ScanScreen() {
     setMode('scanning');
   };
 
-  const handleProductLoaded = (loadedProduct: ParsedProduct) => {
+  const handleProductLoaded = (loadedProduct: ParsedProduct, productId?: string) => {
     setProduct(loadedProduct);
+    setImageFailed(false);
+    if (diaryFlow && hasUsableNutrition(loadedProduct)) {
+      router.replace({
+        pathname: '/log-food',
+        params: buildLogFoodParams(logDate, meal, {
+          name: loadedProduct.name,
+          kcal: loadedProduct.kcal,
+          protein: loadedProduct.protein,
+          carbs: loadedProduct.carbs,
+          fat: loadedProduct.fat,
+          servingQuantityG: loadedProduct.servingQuantityG,
+          densityGPerMl: loadedProduct.densityGPerMl,
+          productId,
+        }),
+      });
+      return;
+    }
     const available = getAvailableServingUnits(loadedProduct);
     if (loadedProduct.servingQuantityG !== undefined && available.includes('unit')) {
       setSelectedUnit('unit');
@@ -106,11 +149,22 @@ export default function ScanScreen() {
 
     setCurrentBarcode(trimmed);
     setMode('loading');
+    setProductIdLookupFailed(false);
 
     const result = await lookupProduct(trimmed);
 
     if (result.ok) {
-      handleProductLoaded(result.product);
+      if (diaryFlow) {
+        try {
+          const productId = await findProductIdByBarcode(result.product.barcode);
+          handleProductLoaded(result.product, productId);
+        } catch {
+          setProductIdLookupFailed(true);
+          setMode('error');
+        }
+      } else {
+        handleProductLoaded(result.product);
+      }
     } else {
       const classified = classifyLookupError(result.error);
       setErrorInfo(classified);
@@ -149,18 +203,22 @@ export default function ScanScreen() {
     performLookup(cleaned);
   };
 
-  const openManualForm = () => {
+  const openManualForm = (existingProduct?: ParsedProduct) => {
+    const fallbackName = existingProduct
+      ? `${existingProduct.brand ? `${existingProduct.brand} ` : ''}${existingProduct.barcode}`
+      : '';
     setManualForm({
       barcode: currentBarcode,
-      name: '',
-      brand: '',
-      kcal: '',
-      protein: '',
-      carbs: '',
-      fat: '',
-      servingQuantityG: '',
+      name: existingProduct && existingProduct.name !== fallbackName ? existingProduct.name : '',
+      brand: existingProduct?.brand ?? '',
+      kcal: existingProduct?.kcal ?? '',
+      protein: existingProduct?.protein ?? '',
+      carbs: existingProduct?.carbs ?? '',
+      fat: existingProduct?.fat ?? '',
+      servingQuantityG: existingProduct?.servingQuantityG ?? '',
     });
     setFormErrors({});
+    setManualNutritionError(false);
     setMode('manual_form');
   };
 
@@ -170,9 +228,46 @@ export default function ScanScreen() {
       setFormErrors(validated.errors);
       return;
     }
+    if (!hasUsableNutrition(validated.product)) {
+      setManualNutritionError(true);
+      return;
+    }
 
     setIsSavingManual(true);
     try {
+      if (diaryFlow) {
+        if (!user) {
+          Alert.alert(t('common.appName'), t('diary.saveError'));
+          return;
+        }
+
+        const product = validated.product;
+        const productId = await insertUserProduct(user.id, {
+          barcode: product.barcode,
+          name: product.name,
+          brand: product.brand,
+          kcal: product.kcal,
+          protein: product.protein,
+          carbs: product.carbs,
+          fat: product.fat,
+          servingQuantityG: product.servingQuantityG,
+          densityGPerMl: product.densityGPerMl,
+        });
+        router.replace({
+          pathname: '/log-food',
+          params: buildLogFoodParams(logDate, meal, {
+            name: product.name,
+            kcal: product.kcal,
+            protein: product.protein,
+            carbs: product.carbs,
+            fat: product.fat,
+            servingQuantityG: product.servingQuantityG,
+            productId,
+          }),
+        });
+        return;
+      }
+
       await saveManualProduct(validated.product);
       handleProductLoaded(validated.product);
     } catch {
@@ -185,22 +280,22 @@ export default function ScanScreen() {
   // 1. Permission Fallback Screen
   if (!permission) {
     return (
-      <SafeAreaView style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#0f766e" />
-      </SafeAreaView>
+      <Screen padding={spacing[6]} style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={colors.accent} />
+      </Screen>
     );
   }
 
   if (!permission.granted) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Screen padding={0} style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.headerBar}>
           <Pressable
             accessibilityRole="button"
             onPress={() => router.back()}
             style={styles.iconButton}
           >
-            <Ionicons name="arrow-back" size={24} color="#0f172a" />
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('scan.title')}</Text>
           <View style={styles.headerSpacer} />
@@ -208,14 +303,14 @@ export default function ScanScreen() {
 
         <View style={styles.fallbackContent}>
           <View style={styles.iconCircle}>
-            <Ionicons name="camera-outline" size={48} color="#0f766e" />
+            <Ionicons name="camera-outline" size={48} color={colors.accent} />
           </View>
           <Text style={styles.fallbackTitle}>{t('scan.permission.title')}</Text>
           <Text style={styles.fallbackExplanation}>{t('scan.permission.explanation')}</Text>
 
           <View style={styles.fallbackActions}>
-            <PrimaryButton label={t('scan.permission.grantButton')} onPress={requestPermission} />
-            <PrimaryButton
+            <Button label={t('scan.permission.grantButton')} onPress={requestPermission} />
+            <Button
               label={t('scan.permission.manualButton')}
               variant="secondary"
               onPress={() => setManualBarcodeModalVisible(true)}
@@ -224,28 +319,28 @@ export default function ScanScreen() {
         </View>
 
         {renderManualBarcodeModal()}
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   // 2. Loading State
   if (mode === 'loading') {
     return (
-      <SafeAreaView style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#0f766e" />
+      <Screen padding={spacing[6]} style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.loadingText}>{t('scan.loading')}</Text>
         <Text style={styles.barcodeSubtext}>#{currentBarcode}</Text>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   // 3. Error State
   if (mode === 'error') {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Screen padding={0} style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.headerBar}>
           <Pressable accessibilityRole="button" onPress={resetToScanner} style={styles.iconButton}>
-            <Ionicons name="arrow-back" size={24} color="#0f172a" />
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('scan.title')}</Text>
           <View style={styles.headerSpacer} />
@@ -258,48 +353,55 @@ export default function ScanScreen() {
                 errorInfo?.type === 'NO_INTERNET' ? 'cloud-offline-outline' : 'alert-circle-outline'
               }
               size={48}
-              color="#dc2626"
+              color={colors.error}
             />
           </View>
 
           <Text style={styles.fallbackTitle}>
-            {errorInfo ? t(errorInfo.messageKey) : t('scan.errors.unknown')}
+            {productIdLookupFailed
+              ? t('diary.loadError')
+              : errorInfo
+                ? t(errorInfo.messageKey)
+                : t('scan.errors.unknown')}
           </Text>
 
-          {errorInfo?.type === 'NOT_FOUND' && (
+          {(errorInfo?.type === 'NOT_FOUND' || errorInfo?.type === 'INVALID_DATA') && (
             <Text style={styles.fallbackExplanation}>{t('scan.errors.notFoundPrompt')}</Text>
           )}
+          {errorInfo?.type === 'INVALID_DATA' ? (
+            <Text style={styles.fallbackExplanation}>{t('diary.nutritionMissing')}</Text>
+          ) : null}
 
           <View style={styles.fallbackActions}>
-            {errorInfo?.type === 'NOT_FOUND' && (
-              <PrimaryButton label={t('scan.errors.addManuallyButton')} onPress={openManualForm} />
+            {(errorInfo?.type === 'NOT_FOUND' || errorInfo?.type === 'INVALID_DATA') && (
+              <Button label={t('scan.errors.addManuallyButton')} onPress={() => openManualForm()} />
             )}
 
-            {errorInfo?.isRetryable && (
-              <PrimaryButton
+            {(productIdLookupFailed || errorInfo?.isRetryable) && (
+              <Button
                 label={t('scan.errors.tryAgain')}
                 onPress={() => performLookup(currentBarcode)}
               />
             )}
 
-            <PrimaryButton
+            <Button
               label={t('scan.errors.scanAnother')}
               variant="secondary"
               onPress={resetToScanner}
             />
           </View>
         </View>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   // 4. Manual Product Entry Form (NOT_FOUND flow)
   if (mode === 'manual_form') {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Screen padding={0} style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.headerBar}>
           <Pressable accessibilityRole="button" onPress={resetToScanner} style={styles.iconButton}>
-            <Ionicons name="close" size={24} color="#0f172a" />
+            <Ionicons name="close" size={24} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('scan.manualForm.title')}</Text>
           <View style={styles.headerSpacer} />
@@ -313,34 +415,31 @@ export default function ScanScreen() {
             <Text style={styles.formSubtitle}>
               {t('scan.manualForm.subtitle', { barcode: manualForm.barcode })}
             </Text>
+            {manualNutritionError ? (
+              <Text style={styles.errorText}>{t('diary.nutritionMissing')}</Text>
+            ) : null}
 
             {/* Product Name */}
             <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>{t('scan.manualForm.nameLabel')} *</Text>
-              <TextInput
+              <TextField
+                label={`${t('scan.manualForm.nameLabel')} *`}
                 value={manualForm.name}
                 onChangeText={(text) => {
                   setManualForm((prev) => ({ ...prev, name: text }));
                   if (formErrors.name) setFormErrors((prev) => ({ ...prev, name: undefined }));
                 }}
                 placeholder={t('scan.manualForm.namePlaceholder')}
-                placeholderTextColor="#94a3b8"
-                style={[styles.textInput, formErrors.name ? styles.inputError : null]}
+                error={formErrors.name ? t('scan.manualForm.errors.nameRequired') : null}
               />
-              {formErrors.name && (
-                <Text style={styles.errorText}>{t('scan.manualForm.errors.nameRequired')}</Text>
-              )}
             </View>
 
             {/* Brand */}
             <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>{t('scan.manualForm.brandLabel')}</Text>
-              <TextInput
-                value={manualForm.brand}
+              <TextField
+                label={t('scan.manualForm.brandLabel')}
+                value={manualForm.brand ?? ''}
                 onChangeText={(text) => setManualForm((prev) => ({ ...prev, brand: text }))}
                 placeholder={t('scan.manualForm.brandPlaceholder')}
-                placeholderTextColor="#94a3b8"
-                style={styles.textInput}
               />
             </View>
 
@@ -349,17 +448,16 @@ export default function ScanScreen() {
 
             {/* Calories */}
             <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>{t('scan.manualForm.kcalLabel')} *</Text>
-              <TextInput
+              <TextField
+                label={`${t('scan.manualForm.kcalLabel')} *`}
                 value={String(manualForm.kcal)}
                 onChangeText={(text) => {
+                  setManualNutritionError(false);
                   setManualForm((prev) => ({ ...prev, kcal: text }));
                   if (formErrors.kcal) setFormErrors((prev) => ({ ...prev, kcal: undefined }));
                 }}
                 placeholder="0"
-                placeholderTextColor="#94a3b8"
                 keyboardType="decimal-pad"
-                style={[styles.textInput, formErrors.kcal ? styles.inputError : null]}
               />
               {formErrors.kcal === 'REQUIRED' && (
                 <Text style={styles.errorText}>{t('scan.manualForm.errors.kcalRequired')}</Text>
@@ -374,10 +472,11 @@ export default function ScanScreen() {
 
             {/* Protein */}
             <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>{t('scan.manualForm.proteinLabel')} *</Text>
-              <TextInput
+              <TextField
+                label={`${t('scan.manualForm.proteinLabel')} *`}
                 value={String(manualForm.protein)}
                 onChangeText={(text) => {
+                  setManualNutritionError(false);
                   setManualForm((prev) => ({ ...prev, protein: text }));
                   if (formErrors.protein || formErrors.macrosSum) {
                     setFormErrors((prev) => ({
@@ -388,9 +487,7 @@ export default function ScanScreen() {
                   }
                 }}
                 placeholder="0"
-                placeholderTextColor="#94a3b8"
                 keyboardType="decimal-pad"
-                style={[styles.textInput, formErrors.protein ? styles.inputError : null]}
               />
               {formErrors.protein && (
                 <Text style={styles.errorText}>
@@ -403,19 +500,18 @@ export default function ScanScreen() {
 
             {/* Carbs */}
             <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>{t('scan.manualForm.carbsLabel')} *</Text>
-              <TextInput
+              <TextField
+                label={`${t('scan.manualForm.carbsLabel')} *`}
                 value={String(manualForm.carbs)}
                 onChangeText={(text) => {
+                  setManualNutritionError(false);
                   setManualForm((prev) => ({ ...prev, carbs: text }));
                   if (formErrors.carbs || formErrors.macrosSum) {
                     setFormErrors((prev) => ({ ...prev, carbs: undefined, macrosSum: undefined }));
                   }
                 }}
                 placeholder="0"
-                placeholderTextColor="#94a3b8"
                 keyboardType="decimal-pad"
-                style={[styles.textInput, formErrors.carbs ? styles.inputError : null]}
               />
               {formErrors.carbs && (
                 <Text style={styles.errorText}>
@@ -428,19 +524,18 @@ export default function ScanScreen() {
 
             {/* Fat */}
             <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>{t('scan.manualForm.fatLabel')} *</Text>
-              <TextInput
+              <TextField
+                label={`${t('scan.manualForm.fatLabel')} *`}
                 value={String(manualForm.fat)}
                 onChangeText={(text) => {
+                  setManualNutritionError(false);
                   setManualForm((prev) => ({ ...prev, fat: text }));
                   if (formErrors.fat || formErrors.macrosSum) {
                     setFormErrors((prev) => ({ ...prev, fat: undefined, macrosSum: undefined }));
                   }
                 }}
                 placeholder="0"
-                placeholderTextColor="#94a3b8"
                 keyboardType="decimal-pad"
-                style={[styles.textInput, formErrors.fat ? styles.inputError : null]}
               />
               {formErrors.fat && (
                 <Text style={styles.errorText}>
@@ -457,8 +552,8 @@ export default function ScanScreen() {
             {/* Optional Portion Size */}
             <Text style={styles.sectionHeading}>{t('scan.manualForm.servingSection')}</Text>
             <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>{t('scan.manualForm.servingQuantityGLabel')}</Text>
-              <TextInput
+              <TextField
+                label={t('scan.manualForm.servingQuantityGLabel')}
                 value={String(manualForm.servingQuantityG ?? '')}
                 onChangeText={(text) => {
                   setManualForm((prev) => ({ ...prev, servingQuantityG: text }));
@@ -467,9 +562,7 @@ export default function ScanScreen() {
                   }
                 }}
                 placeholder={t('scan.manualForm.servingQuantityGPlaceholder')}
-                placeholderTextColor="#94a3b8"
                 keyboardType="decimal-pad"
-                style={[styles.textInput, formErrors.servingQuantityG ? styles.inputError : null]}
               />
               {formErrors.servingQuantityG && (
                 <Text style={styles.errorText}>{t('scan.manualForm.errors.invalidNumber')}</Text>
@@ -477,12 +570,12 @@ export default function ScanScreen() {
             </View>
 
             <View style={styles.formActions}>
-              <PrimaryButton
+              <Button
                 label={t('scan.manualForm.saveButton')}
-                disabled={isSavingManual}
+                loading={isSavingManual}
                 onPress={handleSaveManualProduct}
               />
-              <PrimaryButton
+              <Button
                 label={t('scan.manualForm.cancelButton')}
                 variant="secondary"
                 onPress={resetToScanner}
@@ -490,45 +583,70 @@ export default function ScanScreen() {
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   // 5. Product Screen
   if (mode === 'product' && product) {
+    const nutrition = getNutritionPer100g(product);
+    const nutritionUsable = nutrition !== null;
     const availableUnits = getAvailableServingUnits(product);
     const parsedQuantity = parseFloat(quantityInput.replace(',', '.'));
     const isValidQuantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0;
-    const conversion = isValidQuantity
+    const conversion = nutritionUsable && isValidQuantity
       ? convertServing(product, parsedQuantity, selectedUnit)
       : null;
+    const servingConversion =
+      nutritionUsable && product.servingQuantityG !== undefined
+        ? convertServing(product, 1, 'unit')
+        : null;
 
     const kcalUnit = t('common.units.kcal');
     const gUnit = t('common.units.g');
+    const fallbackName = `${product.brand ? `${product.brand} ` : ''}${product.barcode}`;
+    const isNameMissing = product.name === fallbackName;
 
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Screen padding={0} style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.headerBar}>
           <Pressable accessibilityRole="button" onPress={resetToScanner} style={styles.iconButton}>
-            <Ionicons name="arrow-back" size={24} color="#0f172a" />
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>{t('scan.product.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
 
         <ScrollView contentContainerStyle={styles.productContent}>
+          <View style={styles.productImageFrame}>
+            {product.imageUrl && !imageFailed ? (
+              <Image
+                source={{ uri: product.imageUrl }}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+                onError={() => setImageFailed(true)}
+                style={styles.productImage}
+                accessibilityLabel={product.name}
+              />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Ionicons name="image-outline" size={40} color={colors.muted} />
+              </View>
+            )}
+          </View>
+
           {/* Attributions & Badges */}
           <View style={styles.badgeRow}>
             {product.source === 'user' ? (
               <View style={[styles.badge, styles.userBadge]}>
-                <Ionicons name="person-outline" size={13} color="#0369a1" />
+                <Ionicons name="person-outline" size={13} color={colors.accent} />
                 <Text style={styles.userBadgeText}>
                   {t('scan.product.userContributedAttribution')}
                 </Text>
               </View>
             ) : (
               <View style={[styles.badge, styles.offBadge]}>
-                <Ionicons name="globe-outline" size={13} color="#0f766e" />
+                <Ionicons name="globe-outline" size={13} color={colors.accent} />
                 <Text style={styles.offBadgeText}>
                   {t('scan.product.openFoodFactsAttribution')}
                 </Text>
@@ -547,22 +665,71 @@ export default function ScanScreen() {
             <Text style={styles.productName}>{product.name}</Text>
             {Boolean(product.brand) && <Text style={styles.productBrand}>{product.brand}</Text>}
             <Text style={styles.barcodeLabel}>#{product.barcode}</Text>
+            {isNameMissing ? (
+              <View style={styles.missingName}>
+                <Text style={styles.missingNameNotice}>{t('scan.product.nameMissing')}</Text>
+                <Button
+                  label={t('scan.product.addNameManually')}
+                  variant="secondary"
+                  onPress={() => openManualForm(product)}
+                />
+              </View>
+            ) : null}
           </View>
 
           {/* Per 100g Macros Card */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('scan.product.per100gHeading')}</Text>
-            <View style={styles.card}>
-              <MetricRow
-                label={t('scan.product.calories')}
-                value={`${product.kcal} ${kcalUnit}`}
-                highlight
-              />
-              <MetricRow label={t('scan.product.protein')} value={`${product.protein} ${gUnit}`} />
-              <MetricRow label={t('scan.product.carbs')} value={`${product.carbs} ${gUnit}`} />
-              <MetricRow label={t('scan.product.fat')} value={`${product.fat} ${gUnit}`} />
-            </View>
+            {nutrition ? (
+              <View style={styles.card}>
+                <MetricRow
+                  label={t('scan.product.calories')}
+                  value={`${nutrition.kcal} ${kcalUnit}`}
+                  highlight
+                />
+                <MetricRow
+                  label={t('scan.product.protein')}
+                  value={`${nutrition.protein} ${gUnit}`}
+                />
+                <MetricRow label={t('scan.product.carbs')} value={`${nutrition.carbs} ${gUnit}`} />
+                <MetricRow label={t('scan.product.fat')} value={`${nutrition.fat} ${gUnit}`} />
+              </View>
+            ) : (
+              <View style={styles.card}>
+                <Text style={styles.errorText}>{t('diary.nutritionMissing')}</Text>
+                <Button
+                  label={t('scan.product.addNutritionManually')}
+                  variant="secondary"
+                  onPress={() => openManualForm(product)}
+                />
+              </View>
+            )}
           </View>
+
+          {servingConversion?.ok ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('scan.product.perServingHeading')}</Text>
+              <View style={styles.card}>
+                <MetricRow
+                  label={t('scan.product.calories')}
+                  value={`${servingConversion.kcal} ${kcalUnit}`}
+                  highlight
+                />
+                <MetricRow
+                  label={t('scan.product.protein')}
+                  value={`${servingConversion.protein} ${gUnit}`}
+                />
+                <MetricRow
+                  label={t('scan.product.carbs')}
+                  value={`${servingConversion.carbs} ${gUnit}`}
+                />
+                <MetricRow
+                  label={t('scan.product.fat')}
+                  value={`${servingConversion.fat} ${gUnit}`}
+                />
+              </View>
+            </View>
+          ) : null}
 
           {/* Portion Calculator Card */}
           <View style={styles.section}>
@@ -577,7 +744,7 @@ export default function ScanScreen() {
                   onChangeText={setQuantityInput}
                   keyboardType="decimal-pad"
                   placeholder="100"
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor={colors.muted}
                   style={styles.quantityInput}
                 />
               </View>
@@ -641,18 +808,32 @@ export default function ScanScreen() {
 
           {/* Actions */}
           <View style={styles.productActions}>
-            <PrimaryButton
+            <Button
               label={t('scan.product.addToDiary')}
-              onPress={() => Alert.alert(t('common.appName'), t('scan.product.comingSoon'))}
+              disabled={!nutritionUsable}
+              onPress={() =>
+                router.push({
+                  pathname: '/log-food',
+                  params: buildLogFoodParams(toLocalDateString(new Date()), meal, {
+                    name: product.name,
+                    kcal: product.kcal,
+                    protein: product.protein,
+                    carbs: product.carbs,
+                    fat: product.fat,
+                    servingQuantityG: product.servingQuantityG,
+                    densityGPerMl: product.densityGPerMl,
+                  }),
+                })
+              }
             />
-            <PrimaryButton
+            <Button
               label={t('scan.product.scanAnother')}
               variant="secondary"
               onPress={resetToScanner}
             />
           </View>
         </ScrollView>
-      </SafeAreaView>
+      </Screen>
     );
   }
 
@@ -677,7 +858,7 @@ export default function ScanScreen() {
             onPress={() => router.back()}
             style={styles.cameraIconButton}
           >
-            <Ionicons name="arrow-back" size={24} color="#ffffff" />
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </Pressable>
 
           <Text style={styles.cameraTitle}>{t('scan.title')}</Text>
@@ -687,7 +868,7 @@ export default function ScanScreen() {
             onPress={() => setTorch((prev) => !prev)}
             style={[styles.cameraIconButton, torch ? styles.torchActive : null]}
           >
-            <Ionicons name={torch ? 'flash' : 'flash-outline'} size={24} color="#ffffff" />
+            <Ionicons name={torch ? 'flash' : 'flash-outline'} size={24} color={colors.text} />
           </Pressable>
         </View>
       </SafeAreaView>
@@ -710,7 +891,7 @@ export default function ScanScreen() {
           onPress={() => setManualBarcodeModalVisible(true)}
           style={styles.manualEntryButton}
         >
-          <Ionicons name="keypad-outline" size={20} color="#0f172a" />
+          <Ionicons name="keypad-outline" size={20} color={colors.text} />
           <Text style={styles.manualEntryButtonText}>{t('scan.typeManually')}</Text>
         </Pressable>
       </SafeAreaView>
@@ -742,7 +923,7 @@ export default function ScanScreen() {
                 if (manualBarcodeError) setManualBarcodeError(null);
               }}
               placeholder={t('scan.manualModal.placeholder')}
-              placeholderTextColor="#94a3b8"
+              placeholderTextColor={colors.muted}
               keyboardType="number-pad"
               maxLength={13}
               style={[styles.textInput, manualBarcodeError ? styles.inputError : null]}
@@ -754,11 +935,8 @@ export default function ScanScreen() {
             )}
 
             <View style={styles.modalActions}>
-              <PrimaryButton
-                label={t('scan.manualModal.submit')}
-                onPress={handleManualBarcodeSubmit}
-              />
-              <PrimaryButton
+              <Button label={t('scan.manualModal.submit')} onPress={handleManualBarcodeSubmit} />
+              <Button
                 label={t('scan.manualModal.cancel')}
                 variant="secondary"
                 onPress={() => {
@@ -778,45 +956,45 @@ export default function ScanScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background,
   },
   cameraContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: colors.cameraBackground,
   },
   centerContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f8fafc',
-    padding: 24,
-    gap: 12,
+    backgroundColor: colors.background,
+    padding: spacing[6],
+    gap: spacing[3],
   },
   loadingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#0f172a',
-    marginTop: 12,
+    fontSize: typography.heading,
+    fontFamily: fontFamilies.medium,
+    color: colors.text,
+    marginTop: spacing[3],
   },
   barcodeSubtext: {
-    fontSize: 14,
-    color: '#64748b',
+    fontSize: typography.caption,
+    color: colors.muted,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.background,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
+    fontSize: typography.body,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
   },
   headerSpacer: {
     width: 40,
@@ -826,7 +1004,7 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: radii[24],
   },
   overlayTop: {
     position: 'absolute',
@@ -838,14 +1016,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
   },
   cameraTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#ffffff',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    fontSize: typography.body,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
+    textShadowColor: colors.cameraBackground,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
@@ -853,12 +1031,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: colors.cameraOverlay,
     alignItems: 'center',
     justifyContent: 'center',
   },
   torchActive: {
-    backgroundColor: '#0f766e',
+    backgroundColor: colors.accent,
   },
   viewfinderContainer: {
     ...StyleSheet.absoluteFill,
@@ -876,7 +1054,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 28,
     height: 28,
-    borderColor: '#ffffff',
+    borderColor: colors.text,
   },
   cornerTL: {
     top: 0,
@@ -907,14 +1085,14 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 16,
   },
   viewfinderInstruction: {
-    marginTop: 24,
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    marginTop: spacing[6],
+    color: colors.text,
+    fontSize: typography.caption,
+    fontFamily: fontFamilies.medium,
+    backgroundColor: colors.cameraOverlay,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+    borderRadius: radii[24],
     overflow: 'hidden',
   },
   overlayBottom: {
@@ -923,55 +1101,57 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-    paddingBottom: 24,
+    paddingBottom: spacing[6],
   },
   manualEntryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 28,
-    gap: 8,
-    shadowColor: '#000000',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing[6],
+    paddingVertical: spacing[4],
+    borderRadius: radii[24],
+    gap: spacing[2],
+    borderColor: colors.border,
+    borderWidth: 1,
+    shadowColor: colors.cameraBackground,
     shadowOpacity: 0.15,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 4,
   },
   manualEntryButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0f172a',
+    fontSize: typography.body,
+    fontFamily: fontFamilies.medium,
+    color: colors.text,
   },
   fallbackContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 14,
+    paddingHorizontal: spacing[6],
+    gap: spacing[4],
   },
   iconCircle: {
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: '#ccfbf1',
+    backgroundColor: colors.accentSurface,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
   errorIconCircle: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: colors.errorSurface,
   },
   fallbackTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0f172a',
+    fontSize: typography.heading,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
     textAlign: 'center',
   },
   fallbackExplanation: {
-    fontSize: 15,
-    color: '#64748b',
+    fontSize: typography.body,
+    color: colors.muted,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 12,
@@ -982,228 +1162,260 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   productContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
-    gap: 20,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[8],
+    gap: spacing[4],
+  },
+  productImageFrame: {
+    height: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderRadius: radii[16],
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  productImage: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  missingName: {
+    gap: spacing[2],
+    marginTop: spacing[2],
+  },
+  missingNameNotice: {
+    color: colors.error,
+    fontFamily: fontFamilies.medium,
+    fontSize: typography.caption,
   },
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing[2],
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    gap: 5,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+    borderRadius: radii[12],
+    gap: spacing[1],
   },
   offBadge: {
-    backgroundColor: '#f0fdfa',
+    backgroundColor: colors.accentSurface,
     borderWidth: 1,
-    borderColor: '#99f6e4',
+    borderColor: colors.accent,
   },
   offBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0f766e',
+    fontSize: typography.caption,
+    fontFamily: fontFamilies.medium,
+    color: colors.text,
   },
   userBadge: {
-    backgroundColor: '#f0f9ff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#bae6fd',
+    borderColor: colors.border,
   },
   userBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0369a1',
+    fontSize: typography.caption,
+    fontFamily: fontFamilies.medium,
+    color: colors.text,
   },
   dzBadge: {
-    backgroundColor: '#ecfdf5',
+    backgroundColor: colors.accentSurface,
     borderWidth: 1,
-    borderColor: '#a7f3d0',
+    borderColor: colors.accent,
   },
   dzBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#047857',
+    fontSize: typography.caption,
+    fontFamily: fontFamilies.medium,
+    color: colors.text,
   },
   productHeader: {
-    gap: 4,
+    gap: spacing[1],
   },
   productName: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#0f172a',
+    fontSize: typography.title,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
     letterSpacing: -0.5,
   },
   productBrand: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#0f766e',
+    fontSize: typography.body,
+    fontFamily: fontFamilies.medium,
+    color: colors.accent,
   },
   barcodeLabel: {
-    fontSize: 13,
-    color: '#94a3b8',
+    fontSize: typography.caption,
+    color: colors.muted,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     marginTop: 2,
   },
   section: {
-    gap: 10,
+    gap: spacing[3],
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#64748b',
+    fontSize: typography.caption,
+    fontFamily: fontFamilies.bold,
+    color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radii[16],
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 18,
+    borderColor: colors.border,
+    paddingHorizontal: spacing[4],
   },
   calculatedCard: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#cbd5e1',
-    marginTop: 12,
+    backgroundColor: colors.background,
+    borderColor: colors.border,
+    marginTop: spacing[3],
   },
   portionRow: {
-    gap: 12,
+    gap: spacing[3],
   },
   quantityCol: {
-    gap: 6,
+    gap: spacing[2],
   },
   unitCol: {
-    gap: 6,
+    gap: spacing[2],
   },
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#334155',
+    fontSize: typography.caption,
+    fontFamily: fontFamilies.medium,
+    color: colors.text,
   },
   quantityInput: {
-    height: 50,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    minHeight: 54,
+    backgroundColor: colors.surface,
+    borderRadius: radii[12],
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    paddingHorizontal: 16,
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#0f172a',
+    borderColor: colors.border,
+    paddingHorizontal: spacing[4],
+    fontSize: typography.heading,
+    fontFamily: fontFamilies.medium,
+    color: colors.text,
   },
   unitScroll: {
-    gap: 8,
-    paddingVertical: 2,
+    gap: spacing[2],
+    paddingVertical: spacing[1],
   },
   unitPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderRadius: radii[24],
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: colors.border,
   },
   unitPillActive: {
-    backgroundColor: '#0f766e',
-    borderColor: '#0f766e',
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   unitPillText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#475569',
+    fontSize: typography.caption,
+    fontFamily: fontFamilies.medium,
+    color: colors.muted,
   },
   unitPillTextActive: {
-    color: '#ffffff',
+    color: colors.text,
   },
   invalidQuantityText: {
-    fontSize: 14,
-    color: '#dc2626',
-    marginTop: 6,
+    fontSize: typography.caption,
+    color: colors.error,
+    marginTop: spacing[2],
   },
   productActions: {
-    gap: 12,
-    marginTop: 12,
+    gap: spacing[3],
+    marginTop: spacing[3],
   },
   keyboardContainer: {
     flex: 1,
   },
   formScrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
-    gap: 16,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[8],
+    gap: spacing[4],
   },
   formSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
+    fontSize: typography.caption,
+    color: colors.muted,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginBottom: 4,
+    marginBottom: spacing[1],
   },
   sectionHeading: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f766e',
-    marginTop: 8,
+    fontSize: typography.body,
+    fontFamily: fontFamilies.bold,
+    color: colors.accent,
+    marginTop: spacing[2],
   },
   formGroup: {
-    gap: 6,
+    gap: spacing[2],
   },
   textInput: {
-    height: 50,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+    minHeight: 54,
+    backgroundColor: colors.surface,
+    borderRadius: radii[12],
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#0f172a',
+    borderColor: colors.border,
+    paddingHorizontal: spacing[4],
+    fontSize: typography.body,
+    color: colors.text,
   },
   inputError: {
-    borderColor: '#dc2626',
+    borderColor: colors.error,
   },
   errorText: {
-    fontSize: 13,
-    color: '#dc2626',
+    fontSize: typography.caption,
+    color: colors.error,
   },
   formActions: {
-    gap: 12,
-    marginTop: 16,
+    gap: spacing[3],
+    marginTop: spacing[4],
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: colors.cameraOverlay,
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing[4],
   },
   modalCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 24,
-    gap: 16,
-    shadowColor: '#000000',
+    backgroundColor: colors.surface,
+    borderRadius: radii[24],
+    padding: spacing[6],
+    gap: spacing[4],
+    borderColor: colors.border,
+    borderWidth: 1,
+    shadowColor: colors.cameraBackground,
     shadowOpacity: 0.2,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0f172a',
+    fontSize: typography.heading,
+    fontFamily: fontFamilies.bold,
+    color: colors.text,
   },
   modalSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
+    fontSize: typography.caption,
+    color: colors.muted,
     lineHeight: 20,
   },
   modalActions: {
-    gap: 10,
-    marginTop: 8,
+    gap: spacing[2],
+    marginTop: spacing[2],
   },
 });

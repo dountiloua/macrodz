@@ -83,6 +83,11 @@ function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function readHttpsUrl(value: unknown): string | undefined {
+  const url = readString(value);
+  return url.startsWith('https://') ? url : undefined;
+}
+
 function per100FromServing(
   nutriments: Record<string, unknown> | undefined,
   perServingKey: string,
@@ -174,13 +179,24 @@ export function parseOpenFoodFactsProduct(
   }
 
   const countriesTags = readCountriesTags(raw.countries_tags);
-  const name = readString(raw.product_name);
   const brand = readString(raw.brands);
+  const name =
+    [
+      raw.product_name,
+      raw.product_name_fr,
+      raw.product_name_en,
+      raw.product_name_ar,
+      raw.generic_name,
+    ]
+      .map(readString)
+      .find((candidate) => candidate.length > 0) ?? `${brand ? `${brand} ` : ''}${barcode}`;
+  const imageUrl = readHttpsUrl(raw.image_front_small_url) ?? readHttpsUrl(raw.image_front_url);
   const servingSize = readString(raw.serving_size);
 
   const product: ParsedProduct = {
     barcode,
     name,
+    ...(imageUrl ? { imageUrl } : {}),
     kcal: Math.round(kcal),
     protein: roundTo(protein, 1),
     carbs: roundTo(carbs, 1),

@@ -5,7 +5,8 @@ import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useAuthStore } from '@/store/auth-store';
@@ -15,6 +16,7 @@ void SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
 });
 
 export default function RootLayout() {
+  const [queryClient] = useState(() => new QueryClient());
   const initializeAuth = useAuthStore((state) => state.initialize);
   const [fontsLoaded, fontError] = useFonts({
     DMSans_400Regular,
@@ -43,9 +45,11 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style="auto" />
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
+    </QueryClientProvider>
   );
 }

@@ -128,11 +128,6 @@ export default function ResultsScreen() {
     router.back();
   }
 
-  function handleBack() {
-    buttonHaptic();
-    router.back();
-  }
-
   return (
     <Screen padding={spacing[4]}>
       <StatusBar style="light" />

@@ -69,6 +69,16 @@ describe('fetchOpenFoodFactsProduct', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe(buildProductUrl(BARCODE));
     expect(calls[0].url).toContain('fields=');
+    for (const field of [
+      'product_name_fr',
+      'product_name_en',
+      'product_name_ar',
+      'generic_name',
+      'image_front_small_url',
+      'image_front_url',
+    ]) {
+      expect(calls[0].url).toContain(field);
+    }
     expect(calls[0].init.headers['User-Agent']).toBe('MacroDZ/1.0 (test@example.com)');
   });
 

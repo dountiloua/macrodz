@@ -3,6 +3,7 @@ import * as SQLite from 'expo-sqlite';
 import type { CachedLookup, ParsedProduct, ProductCache } from './types';
 
 const DATABASE_NAME = 'macro-dz.db';
+const CACHE_VERSION = 2;
 
 const CREATE_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS product_cache (
@@ -25,6 +26,22 @@ function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (databasePromise === null) {
     databasePromise = SQLite.openDatabaseAsync(DATABASE_NAME).then(async (database) => {
       await database.execAsync(CREATE_TABLE_SQL);
+      const versionRow = await database.getFirstAsync<{
+        user_version: number;
+      }>('PRAGMA user_version');
+
+      if (versionRow === null) {
+        throw new Error('Unable to read product cache version');
+      }
+
+      const cacheVersion = versionRow.user_version;
+      if (cacheVersion < CACHE_VERSION) {
+        await database.execAsync(
+          `DELETE FROM product_cache;
+           PRAGMA user_version = ${CACHE_VERSION};`,
+        );
+      }
+
       return database;
     });
   }

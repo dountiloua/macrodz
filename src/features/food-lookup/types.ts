@@ -5,6 +5,7 @@ export type ProductSource = 'off' | 'user';
 export type ParsedProduct = ServingProduct & {
   barcode: string;
   name: string;
+  imageUrl?: string;
   brand?: string;
   servingSize?: string;
   countriesTags: string[];
@@ -39,7 +40,13 @@ export type ParseResult = { ok: true; product: ParsedProduct } | { ok: false; er
 export type OpenFoodFactsRawProduct = {
   code?: string | number;
   product_name?: string;
+  product_name_fr?: string;
+  product_name_en?: string;
+  product_name_ar?: string;
+  generic_name?: string;
   brands?: string;
+  image_front_small_url?: string;
+  image_front_url?: string;
   serving_size?: string;
   serving_quantity?: string | number;
   quantity?: string;

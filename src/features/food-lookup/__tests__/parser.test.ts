@@ -68,6 +68,87 @@ describe('parseOpenFoodFactsProduct', () => {
     });
   });
 
+  it('resolves the product name using the documented fallback order', () => {
+    expect(
+      expectProduct({
+        product_name: 'Primary name',
+        product_name_fr: 'Nom français',
+        generic_name: 'Generic name',
+        nutriments: normalRaw.nutriments,
+      }).name,
+    ).toBe('Primary name');
+    expect(
+      expectProduct({
+        product_name_fr: 'Nom français',
+        product_name_en: 'English name',
+        product_name_ar: 'اسم عربي',
+        generic_name: 'Generic name',
+        nutriments: normalRaw.nutriments,
+      }).name,
+    ).toBe('Nom français');
+    expect(
+      expectProduct({
+        product_name_en: 'English name',
+        product_name_ar: 'اسم عربي',
+        generic_name: 'Generic name',
+        nutriments: normalRaw.nutriments,
+      }).name,
+    ).toBe('English name');
+    expect(
+      expectProduct({
+        product_name_ar: 'اسم عربي',
+        generic_name: 'Generic name',
+        nutriments: normalRaw.nutriments,
+      }).name,
+    ).toBe('اسم عربي');
+    expect(
+      expectProduct({ generic_name: 'Generic name', nutriments: normalRaw.nutriments }).name,
+    ).toBe('Generic name');
+  });
+
+  it('uses a French product name when no other name is available', () => {
+    expect(
+      expectProduct({
+        product_name_fr: 'Yaourt nature',
+        nutriments: normalRaw.nutriments,
+      }).name,
+    ).toBe('Yaourt nature');
+  });
+
+  it('uses an HTTPS image URL and falls back to the full-size image', () => {
+    expect(
+      expectProduct({
+        image_front_small_url: 'https://images.example/small.jpg',
+        image_front_url: 'https://images.example/front.jpg',
+        nutriments: normalRaw.nutriments,
+      }).imageUrl,
+    ).toBe('https://images.example/small.jpg');
+    expect(
+      expectProduct({
+        image_front_small_url: 'http://images.example/small.jpg',
+        image_front_url: 'https://images.example/front.jpg',
+        nutriments: normalRaw.nutriments,
+      }).imageUrl,
+    ).toBe('https://images.example/front.jpg');
+    expect(
+      expectProduct({
+        image_front_small_url: 'http://images.example/small.jpg',
+        image_front_url: 'http://images.example/front.jpg',
+        nutriments: normalRaw.nutriments,
+      }).imageUrl,
+    ).toBeUndefined();
+  });
+
+  it('uses brand and barcode when the product has no name or image', () => {
+    const product = expectProduct({
+      brands: 'Danone',
+      nutriments: normalRaw.nutriments,
+    });
+
+    expect(product.name).toBe(`Danone ${ALGERIAN_BARCODE}`);
+    expect(product.imageUrl).toBeUndefined();
+  });
+
   it('converts kJ to kcal when kcal is missing', () => {
     const product = expectProduct({
       nutriments: {

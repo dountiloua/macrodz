@@ -3,7 +3,13 @@ export const OFF_BASE_URL = 'https://world.openfoodfacts.org/api/v2/product';
 export const OFF_FIELDS = [
   'code',
   'product_name',
+  'product_name_fr',
+  'product_name_en',
+  'product_name_ar',
+  'generic_name',
   'brands',
+  'image_front_small_url',
+  'image_front_url',
   'serving_size',
   'serving_quantity',
   'quantity',

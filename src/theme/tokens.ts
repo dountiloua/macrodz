@@ -7,7 +7,10 @@ export const colors = {
   accent: '#0F766E',
   accentSurface: '#173B39',
   error: '#F87171',
+  errorSurface: '#3B2020',
   success: '#4ADE80',
+  cameraBackground: '#000000',
+  cameraOverlay: 'rgba(0, 0, 0, 0.65)',
 } as const;
 
 export const spacing = {
