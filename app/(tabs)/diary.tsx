@@ -132,10 +132,10 @@ export default function DiaryScreen() {
     };
     router.push({
       pathname: '/log-food',
-      params: {
-        ...buildLogFoodParams(date, suggestionMeal, food),
-        grams: String(item.grams),
-      },
+      params: buildLogFoodParams(date, suggestionMeal, food, undefined, {
+        quantity: String(item.grams),
+        unit: item.unit,
+      }),
     });
   }
 
@@ -406,7 +406,7 @@ export default function DiaryScreen() {
                         <View key={`${item.food.id}-${item.grams}`} style={styles.suggestionItem}>
                           <Text style={styles.suggestionPortion}>
                             {item.food.name} · {item.grams}{' '}
-                            {t(`common.units.${item.food.kind === 'liquid' ? 'ml' : 'g'}`)}
+                            {t(`common.units.${item.unit}`)}
                           </Text>
                           <Button
                             label={t('closeMacros.addFood', { food: item.food.name })}

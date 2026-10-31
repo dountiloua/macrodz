@@ -14,6 +14,7 @@ export function createGenericFoodCandidates(
     protein: food.protein,
     carbs: food.carbs,
     fat: food.fat,
+    ...(food.kind ? { kind: food.kind } : {}),
     source: 'generic',
     ...(food.servingQuantityG === undefined ? {} : { servingQuantityG: food.servingQuantityG }),
   }));
@@ -27,6 +28,7 @@ export function createHistoryFoodCandidates(
     {
       name: string;
       grams: number;
+      kind: 'liquid' | 'solid';
       kcal: number;
       protein: number;
       carbs: number;
@@ -52,6 +54,8 @@ export function createHistoryFoodCandidates(
     const aggregate = grouped.get(key) ?? {
       name,
       grams: 0,
+      kind:
+        entry.unit === 'ml' || entry.unit === 'cl' || entry.unit === 'l' ? 'liquid' : 'solid',
       kcal: 0,
       protein: 0,
       carbs: 0,
@@ -75,6 +79,7 @@ export function createHistoryFoodCandidates(
       carbs: aggregate.carbs * per100G,
       fat: aggregate.fat * per100G,
       source: 'history',
+      ...(aggregate.kind ? { kind: aggregate.kind } : {}),
     };
   });
 }

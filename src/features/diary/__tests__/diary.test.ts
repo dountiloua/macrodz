@@ -24,6 +24,7 @@ import {
 } from '../nutrition';
 import type { DiaryEntry, DiaryEntryValues } from '../types';
 import { convertServing } from '../../serving-units';
+import { buildLogFoodParams } from '../navigation';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
@@ -86,6 +87,7 @@ describe('diary calculations', () => {
       quantity: '250',
       unit: 'ml',
     });
+
     expect(getDefaultLogAmount(undefined, undefined, undefined, 'liquid')).toEqual({
       quantity: '100',
       unit: 'ml',
@@ -127,6 +129,33 @@ describe('diary calculations', () => {
       protein: 5,
       carbs: 10,
       fat: 2.5,
+    });
+  });
+
+  it('prefills a liquid close-macros suggestion in millilitres', () => {
+    const params = buildLogFoodParams(
+      '2026-10-28',
+      'lunch',
+      {
+        name: 'Milk',
+        kind: 'liquid',
+        kcal: 64,
+        protein: 3.4,
+        carbs: 4.8,
+        fat: 3.6,
+      },
+      undefined,
+      { quantity: '250', unit: 'ml' },
+    );
+
+    expect(params).toMatchObject({
+      kind: 'liquid',
+      quantity: '250',
+      unit: 'ml',
+    });
+    expect(getDefaultLogAmount(undefined, params.quantity, params.unit, 'liquid')).toEqual({
+      quantity: '250',
+      unit: 'ml',
     });
   });
 

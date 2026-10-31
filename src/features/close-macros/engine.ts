@@ -88,6 +88,7 @@ function makeItem(food: CloseMacrosFoodCandidate, grams: number): CloseMacrosSug
   return {
     food,
     grams,
+    unit: food.kind === 'liquid' ? 'ml' : 'g',
     kcal: food.kcal * factor,
     protein: food.protein * factor,
     carbs: food.carbs * factor,

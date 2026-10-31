@@ -1,8 +1,9 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { createHistoryFoodCandidates } from '../candidates';
+import { createGenericFoodCandidates, createHistoryFoodCandidates } from '../candidates';
 import { suggestCloseMacros } from '../engine';
 import type { CloseMacrosFoodCandidate, CloseMacrosRemaining } from '../types';
+import { GENERIC_FOODS } from '@/features/generic-foods';
 
 const exactRemaining: CloseMacrosRemaining = {
   kcal: 200,
@@ -168,6 +169,34 @@ describe('suggestCloseMacros', () => {
       });
     }
   });
+
+  it('uses millilitres as the portion unit for liquid suggestions', () => {
+    const result = suggestCloseMacros({
+      remaining: exactRemaining,
+      goal: 'maintain',
+      foods: [food({ kind: 'liquid' })],
+    });
+
+    expect(result.status).toBe('suggestions');
+    if (result.status === 'suggestions') {
+      expect(result.suggestions[0].items[0]).toMatchObject({
+        food: { kind: 'liquid' },
+        unit: 'ml',
+      });
+    }
+  });
+});
+
+describe('createGenericFoodCandidates', () => {
+  it('preserves a generic liquid food kind', () => {
+    const milk = GENERIC_FOODS.find((candidate) => candidate.id === 'milk');
+    expect(milk).toBeDefined();
+    if (!milk) return;
+
+    expect(createGenericFoodCandidates([milk], 'en')).toMatchObject([
+      { name: 'Milk', kind: 'liquid', source: 'generic' },
+    ]);
+  });
 });
 
 describe('createHistoryFoodCandidates', () => {
@@ -204,5 +233,40 @@ describe('createHistoryFoodCandidates', () => {
       fat: 2,
       source: 'history',
     });
+  });
+
+  it('preserves a liquid kind from logged volume units', () => {
+    const candidates = createHistoryFoodCandidates([
+      {
+        product_name: 'Milk',
+        log_date: '2026-10-28',
+        created_at: '2026-10-28T10:00:00.000Z',
+        grams: 250,
+        kcal: 160,
+        protein: 8.5,
+        carbs: 12,
+        fat: 9,
+        unit: 'ml',
+      },
+    ]);
+
+    expect(candidates[0]).toMatchObject({ kind: 'liquid', kcal: 64 });
+  });
+
+  it('marks history without a volume unit as solid', () => {
+    const candidates = createHistoryFoodCandidates([
+      {
+        product_name: 'Pasta',
+        log_date: '2026-10-28',
+        created_at: '2026-10-28T10:00:00.000Z',
+        grams: 100,
+        kcal: 350,
+        protein: 12,
+        carbs: 70,
+        fat: 2,
+      },
+    ]);
+
+    expect(candidates[0]).toMatchObject({ kind: 'solid' });
   });
 });

@@ -1,10 +1,12 @@
 import type { DiaryFood, LogFoodParams, Meal } from './types';
+import type { ServingUnit } from '../serving-units';
 
 export function buildLogFoodParams(
   date: string,
   meal: Meal,
   food: DiaryFood,
   edit?: { entryId: string; quantity: number; unit: string },
+  prefill?: { quantity: string; unit: ServingUnit },
 ): LogFoodParams {
   return {
     date,
@@ -21,6 +23,7 @@ export function buildLogFoodParams(
       : { servingQuantityG: String(food.servingQuantityG) }),
     ...(food.densityGPerMl === undefined ? {} : { densityGPerMl: String(food.densityGPerMl) }),
     ...(edit ? { entryId: edit.entryId, quantity: String(edit.quantity), unit: edit.unit } : {}),
+    ...(prefill ? { quantity: prefill.quantity, unit: prefill.unit } : {}),
   };
 }
 

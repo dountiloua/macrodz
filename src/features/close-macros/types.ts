@@ -1,4 +1,5 @@
 import type { Goal } from '@/features/nutrition-calc';
+import type { ProductKind, ServingUnit } from '@/features/serving-units';
 
 export type CloseMacrosRemaining = {
   kcal: number;
@@ -14,6 +15,7 @@ export type CloseMacrosFoodCandidate = {
   protein: number;
   carbs: number;
   fat: number;
+  kind?: ProductKind;
   source: 'generic' | 'history';
   servingQuantityG?: number;
   minPortionG?: number;
@@ -25,6 +27,7 @@ export type CloseMacrosGoal = Goal;
 export type CloseMacrosSuggestionItem = {
   food: CloseMacrosFoodCandidate;
   grams: number;
+  unit: Extract<ServingUnit, 'g' | 'ml'>;
   kcal: number;
   protein: number;
   carbs: number;
