@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import { SERVING_UNITS, type ServingUnit } from '../constants';
 import { convertServing, getAvailableServingUnits } from '../convert';
+import { PRODUCT_DENSITIES_G_PER_ML } from '../density';
 import type { ServingConversionResult, ServingConversionSuccess, ServingProduct } from '../types';
 
 const milk: ServingProduct = {
@@ -37,6 +38,16 @@ function expectSuccess(result: ServingConversionResult): ServingConversionSucces
 }
 
 describe('convertServing', () => {
+  it('defines expected densities for common foods', () => {
+    expect(PRODUCT_DENSITIES_G_PER_ML).toEqual({
+      'olive oil': 0.92,
+      'vegetable oil': 0.92,
+      honey: 1.4,
+      milk: 1.03,
+      water: 1,
+    });
+  });
+
   describe('mass and volume conversions', () => {
     it('converts grams directly without using density', () => {
       expect(expectSuccess(convertServing(milk, 150, 'g'))).toEqual({
@@ -244,6 +255,27 @@ describe('convertServing', () => {
       expect(getAvailableServingUnits({ ...yogurtPot, servingQuantityG: -10 })).not.toContain(
         'unit',
       );
+    });
+
+    it('uses the product density table for known foods', () => {
+      expect(getAvailableServingUnits(milk, 'whole milk')).toContain('cup');
+      expect(getAvailableServingUnits({ ...milk, densityGPerMl: undefined }, 'honey')).toContain(
+        'tbsp',
+      );
+    });
+
+    it('hides volume units for solids without a defined density', () => {
+      const units = getAvailableServingUnits(
+        { kcal: 100, protein: 2, carbs: 20, fat: 1 },
+        'plain flour',
+      );
+      expect(units).not.toContain('ml');
+      expect(units).not.toContain('tbsp');
+      expect(units).toContain('g');
+    });
+
+    it('allows volume units for solids when a density is explicitly provided', () => {
+      expect(getAvailableServingUnits({ ...milk, densityGPerMl: 0.6 }, 'couscous')).toContain('ml');
     });
   });
 });

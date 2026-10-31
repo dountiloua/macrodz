@@ -1,3 +1,5 @@
+import { roundTo } from '@/lib/math';
+
 import { getDefaultCache } from './lookup';
 import type { ParsedProduct, ProductCache } from './types';
 
@@ -44,11 +46,6 @@ function parseLocalizedNumber(value: string | number | undefined): number | null
 
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function roundTo(value: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
 }
 
 export function validateManualProduct(input: ManualProductInput): ManualProductValidationResult {

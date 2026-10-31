@@ -1,3 +1,6 @@
+import { roundTo } from '@/lib/math';
+
+import { getProductDensityGPerMl, isSolidWithoutDensity } from './density';
 import {
   DEFAULT_DENSITY_G_PER_ML,
   NUTRIENT_BASIS_G,
@@ -22,11 +25,6 @@ function isValidProduct(product: ServingProduct): boolean {
     isNonNegativeFinite(product.carbs) &&
     isNonNegativeFinite(product.fat)
   );
-}
-
-function roundTo(value: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
 }
 
 export function convertServing(
@@ -86,15 +84,20 @@ export function convertServing(
   return { ok: true, grams, kcal, protein, carbs, fat };
 }
 
-export function getAvailableServingUnits(product: ServingProduct): ServingUnit[] {
+export function getAvailableServingUnits(product: ServingProduct, productName = ''): ServingUnit[] {
   const hasServingQuantity =
     product.servingQuantityG !== undefined &&
     Number.isFinite(product.servingQuantityG) &&
     product.servingQuantityG > 0;
+  const density = product.densityGPerMl ?? getProductDensityGPerMl(productName);
+  const volumeUnitsAllowed = !isSolidWithoutDensity(productName, density);
 
   return SERVING_UNITS.filter((unit) => {
     if (unit === 'unit' || unit === 'pot') {
       return hasServingQuantity;
+    }
+    if (unit === 'ml' || unit === 'tbsp' || unit === 'tsp' || unit === 'glass' || unit === 'cup') {
+      return volumeUnitsAllowed;
     }
     return true;
   });

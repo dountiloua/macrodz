@@ -36,6 +36,7 @@ type ProfileState = {
   ) => void;
   setPendingSync: (pendingSync: boolean, userId?: string) => void;
   resetProfile: () => void;
+  finishSignOut: (userId: string | null) => void;
   markHydrated: () => void;
 };
 
@@ -111,6 +112,19 @@ export const useProfileStore = create<ProfileState>()(
           targets: null,
           pendingSync: false,
           profilesByUserId: {},
+        });
+      },
+      finishSignOut: (userId) => {
+        const pendingProfile =
+          userId && get().profilesByUserId[userId]?.pendingSync
+            ? get().profilesByUserId[userId]
+            : undefined;
+        set({
+          userId: null,
+          profile: null,
+          targets: null,
+          pendingSync: false,
+          profilesByUserId: userId && pendingProfile ? { [userId]: pendingProfile } : {},
         });
       },
       markHydrated: () => {

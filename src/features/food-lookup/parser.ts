@@ -1,4 +1,5 @@
 import { NUTRIENT_BASIS_G } from '../serving-units/constants';
+import { roundTo } from '@/lib/math';
 import type { OpenFoodFactsRawProduct, ParseResult, ParsedProduct } from './types';
 
 const KJ_PER_KCAL = 4.184;
@@ -38,11 +39,6 @@ function readNutriment(
   }
 
   return readNumber(nutriments[key]);
-}
-
-function roundTo(value: number, decimals: number): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
 }
 
 export function parseServingSizeG(text: string): number | null {

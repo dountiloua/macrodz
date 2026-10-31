@@ -6,6 +6,12 @@ export {
 } from './constants';
 export type { ServingUnit } from './constants';
 export { convertServing, getAvailableServingUnits } from './convert';
+export {
+  getProductDensityGPerMl,
+  isSolidWithoutDensity,
+  isVolumeServingUnit,
+  PRODUCT_DENSITIES_G_PER_ML,
+} from './density';
 export type {
   ServingConversionErrorCode,
   ServingConversionFailure,

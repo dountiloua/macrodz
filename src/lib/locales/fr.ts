@@ -197,6 +197,8 @@ export const fr = {
     nutritionPer100g: '{{kcal}} kcal / 100 g · P {{protein}} g · G {{carbs}} g · L {{fat}} g',
     nutritionMissing:
       'Les informations nutritionnelles sont manquantes ou vides. Ajoutez des valeurs valides manuellement avant de journaliser cet aliment.',
+    approximateVolumeWarning:
+      "Cette quantité est approximative, car la densité de ce produit n'est pas connue.",
     loadError: 'Impossible de charger votre journal. Veuillez réessayer.',
     saveError: "Impossible d'enregistrer cette modification. Veuillez réessayer.",
     quantityError: 'Saisissez une quantité dans la plage autorisée.',

@@ -194,6 +194,8 @@ export const en = {
     nutritionPer100g: '{{kcal}} kcal / 100 g · P {{protein}} g · C {{carbs}} g · F {{fat}} g',
     nutritionMissing:
       'Nutrition information is missing or empty. Add valid values manually before logging this food.',
+    approximateVolumeWarning:
+      'This amount is approximate because this product does not have a known density.',
     loadError: 'Your diary could not be loaded. Please try again.',
     saveError: 'Your change could not be saved. Please try again.',
     quantityError: 'Enter a quantity within the allowed range.',

@@ -27,6 +27,8 @@ type AuthState = {
 
 let authSubscriptionInitialized = false;
 const userProfileOperations = new Map<string, Promise<void>>();
+const signedOutProfileCleanups = new Map<string, Promise<void>>();
+const finalProfileSyncs = new Map<string, Promise<void>>();
 
 function isCurrentUser(userId: string): boolean {
   return useAuthStore.getState().user?.id === userId;
@@ -77,13 +79,54 @@ function processAuthenticatedUser(userId: string): Promise<void> {
   return operation;
 }
 
-async function clearSignedOutProfile() {
-  await waitForProfileHydration();
-  if (useAuthStore.getState().user !== null) {
-    return;
+function attemptFinalProfileSync(userId: string): Promise<void> {
+  const existingSync = finalProfileSyncs.get(userId);
+  if (existingSync) {
+    return existingSync;
   }
 
-  useProfileStore.getState().resetProfile();
+  const sync = Promise.resolve().then(async () => {
+    await waitForProfileHydration();
+    const pendingProfile = useProfileStore.getState().profilesByUserId[userId];
+    if (pendingProfile?.pendingSync) {
+      await syncProfileAndUpdatePending(pendingProfile.profile, pendingProfile.targets, userId);
+    }
+  });
+  finalProfileSyncs.set(userId, sync);
+  return sync;
+}
+
+function clearSignedOutProfile(userId?: string): Promise<void> {
+  const targetUserId = userId ?? useProfileStore.getState().userId;
+  if (!targetUserId) {
+    return Promise.resolve();
+  }
+
+  const existingCleanup = signedOutProfileCleanups.get(targetUserId);
+  if (existingCleanup) {
+    return existingCleanup;
+  }
+
+  const cleanup = Promise.resolve()
+    .then(async () => {
+      await waitForProfileHydration();
+      if (useAuthStore.getState().user !== null) {
+        return;
+      }
+
+      await attemptFinalProfileSync(targetUserId);
+
+      if (useAuthStore.getState().user === null) {
+        useProfileStore.getState().finishSignOut(targetUserId);
+      }
+    })
+    .finally(() => {
+      signedOutProfileCleanups.delete(targetUserId);
+      finalProfileSyncs.delete(targetUserId);
+    });
+
+  signedOutProfileCleanups.set(targetUserId, cleanup);
+  return cleanup;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -181,6 +224,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signOut: async () => {
+    const userId = useAuthStore.getState().user?.id ?? useProfileStore.getState().userId;
+    if (userId) {
+      await attemptFinalProfileSync(userId);
+    }
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
@@ -188,7 +235,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
     } finally {
       set({ session: null, user: null });
-      await clearSignedOutProfile();
+      await clearSignedOutProfile(userId ?? undefined);
     }
   },
 }));

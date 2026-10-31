@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { randomUUID } from 'expo-crypto';
 
 import {
   addDiaryEntry,
@@ -41,7 +42,7 @@ export function useDiaryMutations(userId: string, date: string) {
         queryKey,
         (entries) => [
           ...entries,
-          { ...values, id: `pending-${Date.now()}`, created_at: new Date().toISOString() },
+          { ...values, id: randomUUID(), created_at: new Date().toISOString() },
         ],
         () => addDiaryEntry(values),
       ),

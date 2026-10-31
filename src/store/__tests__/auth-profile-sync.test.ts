@@ -203,6 +203,9 @@ describe('authenticated profile sync lifecycle', () => {
     useProfileStore.getState().saveProfile(profile, targets, userId, true);
     useAuthStore.setState({ session, user: session.user });
     mockSupabaseAuth.signOut.mockImplementation(async () => ({ error: null }) as never);
+    mockSupabaseFrom.mockImplementation(() => ({
+      upsert: async () => ({ error: null }),
+    }));
 
     await useAuthStore.getState().signOut();
 
@@ -212,6 +215,32 @@ describe('authenticated profile sync lifecycle', () => {
       targets: null,
       pendingSync: false,
       profilesByUserId: {},
+    });
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains only the signed-out user pending profile after a failed final sync', async () => {
+    const otherUserId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    useProfileStore.getState().saveProfile(profile, targets, userId, true);
+    useProfileStore.getState().saveProfile(profile, targets, otherUserId, false);
+    useAuthStore.setState({ session, user: session.user });
+    mockSupabaseAuth.signOut.mockImplementation(async () => ({ error: null }) as never);
+    mockSupabaseFrom.mockImplementation(() => ({
+      upsert: async () => ({ error: { message: 'offline' } }),
+    }));
+
+    await useAuthStore.getState().signOut();
+
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(1);
+    expect(useProfileStore.getState()).toMatchObject({
+      userId: null,
+      profile: null,
+      targets: null,
+      pendingSync: false,
+      profilesByUserId: {
+        [userId]: { profile, targets, pendingSync: true },
+      },
     });
     expect(useAuthStore.getState().user).toBeNull();
   });

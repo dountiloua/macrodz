@@ -18,6 +18,8 @@ import { MEALS } from '@/features/diary/types';
 import {
   convertServing,
   getAvailableServingUnits,
+  getProductDensityGPerMl,
+  isVolumeServingUnit,
   type ServingUnit,
 } from '@/features/serving-units';
 import { useAuthStore } from '@/store/auth-store';
@@ -45,7 +47,11 @@ export default function LogFoodScreen() {
     carbs: numericParam('carbs'),
     fat: numericParam('fat'),
     ...(Number.isFinite(servingQuantityG) && servingQuantityG > 0 ? { servingQuantityG } : {}),
-    ...(Number.isFinite(densityGPerMl) && densityGPerMl > 0 ? { densityGPerMl } : {}),
+    ...(Number.isFinite(densityGPerMl) && densityGPerMl > 0
+      ? { densityGPerMl }
+      : getProductDensityGPerMl(name) !== undefined
+        ? { densityGPerMl: getProductDensityGPerMl(name) }
+        : {}),
     ...(productId ? { productId } : {}),
   };
   const validFood =
@@ -54,24 +60,28 @@ export default function LogFoodScreen() {
       (value) => Number.isFinite(value) && value >= 0,
     );
   const nutritionValid = hasUsableNutrition(food);
-  const [initialAmount] = useState(() =>
-    gramsParam !== undefined &&
-    Number.isFinite(Number(gramsParam)) &&
-    Number(gramsParam) > 0 &&
-    Number(gramsParam) <= 10_000
-      ? { quantity: gramsParam, unit: 'g' as const }
-      : getDefaultLogAmount(
-          food.servingQuantityG,
-          readSingleParam(params.quantity),
-          readSingleParam(params.unit),
-        ),
-  );
+  const [initialAmount] = useState(() => {
+    const suggested =
+      gramsParam !== undefined &&
+      Number.isFinite(Number(gramsParam)) &&
+      Number(gramsParam) > 0 &&
+      Number(gramsParam) <= 10_000
+        ? { quantity: gramsParam, unit: 'g' as const }
+        : getDefaultLogAmount(
+            food.servingQuantityG,
+            readSingleParam(params.quantity),
+            readSingleParam(params.unit),
+          );
+    return getAvailableServingUnits(food, name).includes(suggested.unit)
+      ? suggested
+      : { quantity: '100', unit: 'g' as const };
+  });
   const [quantity, setQuantity] = useState(initialAmount.quantity);
   const [unit, setUnit] = useState<ServingUnit>(initialAmount.unit);
   const [error, setError] = useState(false);
   const [saving, setSaving] = useState(false);
   const mutations = useDiaryMutations(user?.id ?? '', date);
-  const units = getAvailableServingUnits(food);
+  const units = getAvailableServingUnits(food, name);
   const parsedQuantity = Number(quantity.replace(',', '.'));
   const preview = convertServing(food, parsedQuantity, unit);
   let canSave = false;
@@ -169,6 +179,11 @@ export default function LogFoodScreen() {
             </Pressable>
           ))}
         </View>
+        {isVolumeServingUnit(unit) &&
+        food.densityGPerMl === undefined &&
+        getProductDensityGPerMl(name) === undefined ? (
+          <Text style={styles.warning}>{t('diary.approximateVolumeWarning')}</Text>
+        ) : null}
 
         <View style={styles.previewCard}>
           <Text style={styles.previewTitle}>{t('diary.livePreview')}</Text>
@@ -267,4 +282,8 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
   },
   error: { color: colors.error, fontFamily: fontFamilies.medium, fontSize: typography.caption },
+  warning: {
+    color: colors.muted,
+    fontSize: typography.caption,
+  },
 });
