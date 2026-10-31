@@ -18,6 +18,7 @@ import { sumDiaryTotals } from '../totals';
 import {
   formatDiaryEntryMacros,
   getDefaultLogAmount,
+  getLogFoodUnitOptions,
   getNutritionPer100g,
   hasUsableNutrition,
 } from '../nutrition';
@@ -72,12 +73,43 @@ describe('diary calculations', () => {
     expect(hasUsableNutrition({ kcal: 100, protein: 0, carbs: 0, fat: 0 })).toBe(true);
     expect(hasUsableNutrition({ kcal: 0, protein: 0, carbs: 0, fat: 0 })).toBe(false);
     expect(hasUsableNutrition({ kcal: 100, protein: 4, carbs: 2 })).toBe(false);
+    expect(hasUsableNutrition({ kcal: 0, protein: 0, carbs: 0, fat: 0, kind: 'liquid' })).toBe(
+      true,
+    );
   });
 
-  it('defaults logs to one known serving or 100 grams and preserves snapshot macros', () => {
-    expect(getDefaultLogAmount(50)).toEqual({ quantity: '1', unit: 'unit' });
+  it('defaults logs to known serving sizes in their base unit and preserves snapshot macros', () => {
+    expect(getDefaultLogAmount(50)).toEqual({ quantity: '50', unit: 'g' });
     expect(getDefaultLogAmount()).toEqual({ quantity: '100', unit: 'g' });
     expect(getDefaultLogAmount(50, '2', 'unit')).toEqual({ quantity: '2', unit: 'unit' });
+    expect(getDefaultLogAmount(250, undefined, undefined, 'liquid')).toEqual({
+      quantity: '250',
+      unit: 'ml',
+    });
+    expect(getDefaultLogAmount(undefined, undefined, undefined, 'liquid')).toEqual({
+      quantity: '100',
+      unit: 'ml',
+    });
+    expect(
+      getLogFoodUnitOptions({
+        name: 'Milk',
+        kind: 'liquid',
+        kcal: 64,
+        protein: 3,
+        carbs: 5,
+        fat: 3,
+      }),
+    ).toEqual(['ml', 'cl', 'l']);
+    expect(
+      getLogFoodUnitOptions({
+        name: 'Pasta',
+        kind: 'solid',
+        kcal: 350,
+        protein: 12,
+        carbs: 70,
+        fat: 2,
+      }),
+    ).toEqual(['g', 'ml', 'tbsp', 'tsp', 'glass', 'cup']);
     expect(
       formatDiaryEntryMacros(row, {
         protein: 'Protein',
@@ -131,6 +163,7 @@ describe('diary calculations', () => {
       quantity: 150,
       unit: 'g',
     });
+
     const byUnit = createDiaryEntryValues({
       userId: 'user-1',
       date: '2026-10-28',
@@ -142,6 +175,35 @@ describe('diary calculations', () => {
 
     expect(byGrams).toMatchObject({ grams: 150, kcal: 300, protein: 15, carbs: 30, fat: 7.5 });
     expect(byUnit).toMatchObject({ grams: 100, kcal: 200, protein: 10, carbs: 20, fat: 5 });
+  });
+
+  it('stores liquid millilitres in the grams column without density adjustment', () => {
+    const values = createDiaryEntryValues({
+      userId: 'user-1',
+      date: '2026-10-28',
+      meal: 'lunch',
+      food: {
+        kind: 'liquid',
+        name: 'Milk',
+        kcal: 64,
+        protein: 3.4,
+        carbs: 4.8,
+        fat: 3.6,
+        densityGPerMl: 1.03,
+      },
+      quantity: 50,
+      unit: 'cl',
+    });
+
+    expect(values).toMatchObject({
+      quantity: 50,
+      unit: 'cl',
+      grams: 500,
+      kcal: 320,
+      protein: 17,
+      carbs: 24,
+      fat: 18,
+    });
   });
 
   it('rejects diary values outside food_logs database constraints', () => {

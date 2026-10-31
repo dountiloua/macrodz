@@ -2,10 +2,19 @@ import { describe, expect, it } from '@jest/globals';
 
 import { SERVING_UNITS, type ServingUnit } from '../constants';
 import { convertServing, getAvailableServingUnits } from '../convert';
-import { PRODUCT_DENSITIES_G_PER_ML } from '../density';
+import { getProductDensityGPerMl, PRODUCT_DENSITIES_G_PER_ML } from '../density';
 import type { ServingConversionResult, ServingConversionSuccess, ServingProduct } from '../types';
 
 const milk: ServingProduct = {
+  kcal: 64,
+  protein: 3.4,
+  carbs: 4.8,
+  fat: 3.6,
+  densityGPerMl: 1.03,
+};
+
+const liquid: ServingProduct = {
+  kind: 'liquid',
   kcal: 64,
   protein: 3.4,
   carbs: 4.8,
@@ -46,9 +55,38 @@ describe('convertServing', () => {
       milk: 1.03,
       water: 1,
     });
+    expect(getProductDensityGPerMl("Huile d'olive")).toBe(0.92);
+    expect(getProductDensityGPerMl('Miel')).toBe(1.4);
   });
 
   describe('mass and volume conversions', () => {
+    it('converts cl and l to millilitres without applying density for liquids', () => {
+      expect(expectSuccess(convertServing(liquid, 1, 'cl'))).toEqual({
+        ok: true,
+        grams: 10,
+        kcal: 6,
+        protein: 0.3,
+        carbs: 0.5,
+        fat: 0.4,
+      });
+      expect(expectSuccess(convertServing(liquid, 1, 'l')).grams).toBe(1000);
+    });
+
+    it('rejects units unavailable for each product kind', () => {
+      for (const unit of ['g', 'unit', 'pot', 'tbsp', 'tsp', 'cup', 'glass'] as const) {
+        expect(convertServing(liquid, 100, unit)).toEqual({
+          ok: false,
+          error: 'UNIT_NOT_AVAILABLE',
+        });
+      }
+      for (const unit of ['cl', 'l'] as const) {
+        expect(convertServing({ ...milk, kind: 'solid' }, 1, unit)).toEqual({
+          ok: false,
+          error: 'UNIT_NOT_AVAILABLE',
+        });
+      }
+    });
+
     it('converts grams directly without using density', () => {
       expect(expectSuccess(convertServing(milk, 150, 'g'))).toEqual({
         ok: true,
@@ -214,7 +252,12 @@ describe('convertServing', () => {
 
     it('never returns NaN for any supported unit', () => {
       for (const unit of SERVING_UNITS) {
-        const product = unit === 'unit' || unit === 'pot' ? yogurtPot : milk;
+        const product =
+          unit === 'cl' || unit === 'l'
+            ? liquid
+            : unit === 'unit' || unit === 'pot'
+              ? yogurtPot
+              : milk;
         const result = convertServing(product, 1, unit);
 
         expect(result.ok).toBe(true);
@@ -240,7 +283,7 @@ describe('convertServing', () => {
       const units = getAvailableServingUnits(yogurtPot);
       expect(units).toContain('unit');
       expect(units).toContain('pot');
-      expect(units).toEqual(SERVING_UNITS);
+      expect(units).toEqual(SERVING_UNITS.filter((unit) => unit !== 'cl' && unit !== 'l'));
     });
 
     it('excludes unit and pot when servingQuantityG is undefined', () => {
@@ -272,6 +315,10 @@ describe('convertServing', () => {
       expect(units).not.toContain('ml');
       expect(units).not.toContain('tbsp');
       expect(units).toContain('g');
+    });
+
+    it('offers only ml, cl, and l for liquids', () => {
+      expect(getAvailableServingUnits(liquid)).toEqual(['ml', 'cl', 'l']);
     });
 
     it('allows volume units for solids when a density is explicitly provided', () => {

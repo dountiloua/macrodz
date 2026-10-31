@@ -18,5 +18,6 @@ export type {
   ServingConversionInput,
   ServingConversionResult,
   ServingConversionSuccess,
+  ProductKind,
   ServingProduct,
 } from './types';

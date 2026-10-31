@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { parseOpenFoodFactsProduct, parseServingSizeG } from '../parser';
+import { classifyProductKind, parseOpenFoodFactsProduct, parseServingSizeG } from '../parser';
 import type { OpenFoodFactsRawProduct, ParsedProduct } from '../types';
 
 const ALGERIAN_BARCODE = '6131234567890';
@@ -51,9 +51,23 @@ describe('parseServingSizeG', () => {
   });
 });
 
+describe('classifyProductKind', () => {
+  it('classifies volume sizes and beverage categories as liquids', () => {
+    expect(classifyProductKind('330 ml can')).toBe('liquid');
+    expect(classifyProductKind('1.5 L bottle')).toBe('liquid');
+    expect(classifyProductKind(undefined, ['en:waters'])).toBe('liquid');
+  });
+
+  it('keeps edible oil and unrecognized products solid', () => {
+    expect(classifyProductKind('1 L bottle', [], 'Olive oil')).toBe('solid');
+    expect(classifyProductKind('500 g pasta')).toBe('solid');
+  });
+});
+
 describe('parseOpenFoodFactsProduct', () => {
   it('parses a normal per-100g product', () => {
     expect(expectProduct(normalRaw)).toEqual({
+      kind: 'solid',
       barcode: ALGERIAN_BARCODE,
       name: 'Yaourt nature',
       brand: 'Danone',
@@ -65,6 +79,27 @@ describe('parseOpenFoodFactsProduct', () => {
       fat: 3.6,
       countriesTags: ['en:algeria', 'en:france'],
       isLikelyAlgerian: true,
+    });
+  });
+
+  it('uses the 100 ml nutrition fields for a liquid', () => {
+    const product = expectProduct({
+      product_name: 'Water',
+      quantity: '1.5 L',
+      nutriments: {
+        'energy-kcal_100ml': 42,
+        proteins_100ml: 1.2,
+        carbohydrates_100ml: 5.4,
+        fat_100ml: 0.3,
+      },
+    });
+
+    expect(product).toMatchObject({
+      kind: 'liquid',
+      kcal: 42,
+      protein: 1.2,
+      carbs: 5.4,
+      fat: 0.3,
     });
   });
 

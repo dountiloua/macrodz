@@ -8,6 +8,7 @@ import {
 import type { ParsedProduct } from '../types';
 
 const product: ParsedProduct = {
+  kind: 'solid',
   barcode: '0123456789012',
   name: 'Olive oil',
   kcal: 884,
@@ -39,6 +40,7 @@ describe('scan handlers', () => {
       protein: 0,
       carbs: 0,
       fat: 100,
+      kind: 'solid',
       servingQuantityG: '',
     });
   });

@@ -14,6 +14,7 @@ export function buildLogFoodParams(
     protein: String(food.protein),
     carbs: String(food.carbs),
     fat: String(food.fat),
+    ...(food.kind ? { kind: food.kind } : {}),
     ...(food.productId ? { productId: food.productId } : {}),
     ...(food.servingQuantityG === undefined
       ? {}

@@ -19,6 +19,7 @@ export function buildManualProductForm(currentBarcode: string, existingProduct?:
     protein: existingProduct?.protein ?? '',
     carbs: existingProduct?.carbs ?? '',
     fat: existingProduct?.fat ?? '',
+    kind: existingProduct?.kind ?? 'solid',
     servingQuantityG: existingProduct?.servingQuantityG ?? '',
   };
 }
@@ -27,6 +28,10 @@ export function getInitialServingSelection(
   product: ParsedProduct,
   availableUnits: readonly ServingUnit[],
 ): { quantity: string; unit: ServingUnit } {
+  if (product.kind === 'liquid' && availableUnits.includes('ml')) {
+    return { quantity: '100', unit: 'ml' };
+  }
+
   if (product.servingQuantityG !== undefined && availableUnits.includes('unit')) {
     return { quantity: '1', unit: 'unit' };
   }

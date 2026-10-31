@@ -108,6 +108,7 @@ export default function ScanFlow() {
     protein: '',
     carbs: '',
     fat: '',
+    kind: 'solid',
     servingQuantityG: '',
   });
   const [formErrors, setFormErrors] = useState<ManualProductValidationErrors>({});
@@ -132,6 +133,7 @@ export default function ScanFlow() {
           protein: loadedProduct.protein,
           carbs: loadedProduct.carbs,
           fat: loadedProduct.fat,
+          kind: loadedProduct.kind,
           servingQuantityG: loadedProduct.servingQuantityG,
           densityGPerMl: loadedProduct.densityGPerMl,
           productId,
@@ -251,6 +253,7 @@ export default function ScanFlow() {
             protein: product.protein,
             carbs: product.carbs,
             fat: product.fat,
+            kind: product.kind,
             servingQuantityG: product.servingQuantityG,
             productId,
           }),
@@ -433,8 +436,36 @@ export default function ScanFlow() {
               />
             </View>
 
+            <Text style={styles.sectionHeading}>{t('scan.manualForm.productKindLabel')}</Text>
+            <View style={styles.unitScroll}>
+              {(['solid', 'liquid'] as const).map((kind) => (
+                <Pressable
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: manualForm.kind === kind }}
+                  key={kind}
+                  onPress={() => setManualForm((previous) => ({ ...previous, kind }))}
+                  style={[styles.unitPill, manualForm.kind === kind ? styles.unitPillActive : null]}
+                >
+                  <Text
+                    style={[
+                      styles.unitPillText,
+                      manualForm.kind === kind ? styles.unitPillTextActive : null,
+                    ]}
+                  >
+                    {t(`scan.manualForm.${kind}`)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
             {/* Per 100g Nutrition */}
-            <Text style={styles.sectionHeading}>{t('scan.manualForm.per100gSection')}</Text>
+            <Text style={styles.sectionHeading}>
+              {t(
+                manualForm.kind === 'liquid'
+                  ? 'scan.manualForm.per100mlSection'
+                  : 'scan.manualForm.per100gSection',
+              )}
+            </Text>
 
             {/* Calories */}
             <View style={styles.formGroup}>
@@ -453,7 +484,13 @@ export default function ScanFlow() {
                 <Text style={styles.errorText}>{t('scan.manualForm.errors.kcalRequired')}</Text>
               )}
               {formErrors.kcal === 'EXCEEDS_MAX' && (
-                <Text style={styles.errorText}>{t('scan.manualForm.errors.kcalExceedsMax')}</Text>
+                <Text style={styles.errorText}>
+                  {t(
+                    manualForm.kind === 'liquid'
+                      ? 'scan.manualForm.errors.kcalExceedsMaxPer100ml'
+                      : 'scan.manualForm.errors.kcalExceedsMax',
+                  )}
+                </Text>
               )}
               {formErrors.kcal === 'INVALID_NUMBER' && (
                 <Text style={styles.errorText}>{t('scan.manualForm.errors.invalidNumber')}</Text>
@@ -543,7 +580,11 @@ export default function ScanFlow() {
             <Text style={styles.sectionHeading}>{t('scan.manualForm.servingSection')}</Text>
             <View style={styles.formGroup}>
               <TextField
-                label={t('scan.manualForm.servingQuantityGLabel')}
+                label={t(
+                  manualForm.kind === 'liquid'
+                    ? 'scan.manualForm.servingQuantityMlLabel'
+                    : 'scan.manualForm.servingQuantityGLabel',
+                )}
                 value={String(manualForm.servingQuantityG ?? '')}
                 onChangeText={(text) => {
                   setManualForm((prev) => ({ ...prev, servingQuantityG: text }));
@@ -551,7 +592,11 @@ export default function ScanFlow() {
                     setFormErrors((prev) => ({ ...prev, servingQuantityG: undefined }));
                   }
                 }}
-                placeholder={t('scan.manualForm.servingQuantityGPlaceholder')}
+                placeholder={t(
+                  manualForm.kind === 'liquid'
+                    ? 'scan.manualForm.servingQuantityMlPlaceholder'
+                    : 'scan.manualForm.servingQuantityGPlaceholder',
+                )}
                 keyboardType="decimal-pad"
               />
               {formErrors.servingQuantityG && (
@@ -674,7 +719,13 @@ export default function ScanFlow() {
 
           {/* Per 100g Macros Card */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('scan.product.per100gHeading')}</Text>
+            <Text style={styles.sectionTitle}>
+              {t(
+                product.kind === 'liquid'
+                  ? 'scan.product.per100mlHeading'
+                  : 'scan.product.per100gHeading',
+              )}
+            </Text>
             {nutrition ? (
               <View style={styles.card}>
                 <MetricRow
@@ -774,7 +825,8 @@ export default function ScanFlow() {
                 </ScrollView>
               </View>
             </View>
-            {isVolumeServingUnit(selectedUnit) &&
+            {product.kind !== 'liquid' &&
+            isVolumeServingUnit(selectedUnit) &&
             product.densityGPerMl === undefined &&
             getProductDensityGPerMl(product.name) === undefined ? (
               <Text style={styles.approximateWarning}>{t('diary.approximateVolumeWarning')}</Text>
@@ -784,8 +836,10 @@ export default function ScanFlow() {
             {conversion && conversion.ok ? (
               <View style={[styles.card, styles.calculatedCard]}>
                 <MetricRow
-                  label={t('scan.product.gramsTotal')}
-                  value={`${conversion.grams} ${gUnit}`}
+                  label={t(
+                    product.kind === 'liquid' ? 'diary.milliliters' : 'scan.product.gramsTotal',
+                  )}
+                  value={`${conversion.grams} ${product.kind === 'liquid' ? t('common.units.ml') : gUnit}`}
                 />
                 <MetricRow
                   label={t('scan.product.calories')}
@@ -820,6 +874,7 @@ export default function ScanFlow() {
                     protein: product.protein,
                     carbs: product.carbs,
                     fat: product.fat,
+                    kind: product.kind,
                     servingQuantityG: product.servingQuantityG,
                     densityGPerMl: product.densityGPerMl,
                   }),

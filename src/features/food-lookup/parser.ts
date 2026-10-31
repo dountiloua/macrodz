@@ -1,10 +1,46 @@
 import { NUTRIENT_BASIS_G } from '../serving-units/constants';
 import { roundTo } from '@/lib/math';
+import type { ProductKind } from '../serving-units/types';
 import type { OpenFoodFactsRawProduct, ParseResult, ParsedProduct } from './types';
 
 const KJ_PER_KCAL = 4.184;
 const MAX_KCAL_PER_100G = 900;
 const MAX_MACRO_SUM_PER_100G = 100;
+const LIQUID_CATEGORY_TAGS = new Set([
+  'en:beverages',
+  'en:waters',
+  'en:milks',
+  'en:juices',
+  'en:sodas',
+  'en:plant-based-milks',
+  'en:fermented-milks',
+]);
+export function classifyProductKind(
+  quantityText: unknown,
+  categoriesTags: unknown = [],
+  productName: unknown = '',
+): ProductKind {
+  const tags = Array.isArray(categoriesTags)
+    ? categoriesTags
+        .filter((tag): tag is string => typeof tag === 'string')
+        .map((tag) => tag.trim().toLowerCase())
+    : [];
+  const normalizedName = typeof productName === 'string' ? productName.toLowerCase() : '';
+  const isOilOrHoney =
+    tags.some((tag) => tag === 'en:honey' || /(?:^|-)oils?$/.test(tag)) ||
+    /\b(?:oil|oils|huile|huiles|honey|miel)\b|زيت|عسل/u.test(normalizedName);
+
+  if (isOilOrHoney) {
+    return 'solid';
+  }
+
+  const quantity = typeof quantityText === 'string' ? quantityText : '';
+  if (/(?:^|[^a-z])(?:ml|cl|dl|l|litres?|liters?|fl\s*oz)(?=$|[^a-z])/i.test(quantity)) {
+    return 'liquid';
+  }
+
+  return tags.some((tag) => LIQUID_CATEGORY_TAGS.has(tag)) ? 'liquid' : 'solid';
+}
 
 function readNumber(value: unknown): number | null {
   if (typeof value === 'number') {
@@ -101,10 +137,14 @@ function per100FromServing(
 function resolveNutrient(
   nutriments: Record<string, unknown> | undefined,
   per100Key: string,
+  per100MlKey: string,
   perServingKey: string,
   servingQuantityG: number | null,
+  kind: ProductKind,
 ): number | null {
-  const per100 = readNutriment(nutriments, per100Key);
+  const per100 =
+    (kind === 'liquid' ? readNutriment(nutriments, per100MlKey) : null) ??
+    readNutriment(nutriments, per100Key);
 
   if (per100 !== null) {
     return per100;
@@ -116,14 +156,19 @@ function resolveNutrient(
 function resolveKcal(
   nutriments: Record<string, unknown> | undefined,
   servingQuantityG: number | null,
+  kind: ProductKind,
 ): number | null {
-  const kcal = readNutriment(nutriments, 'energy-kcal_100g');
+  const kcal =
+    (kind === 'liquid' ? readNutriment(nutriments, 'energy-kcal_100ml') : null) ??
+    readNutriment(nutriments, 'energy-kcal_100g');
 
   if (kcal !== null) {
     return kcal;
   }
 
-  const kilojoules = readNutriment(nutriments, 'energy_100g');
+  const kilojoules =
+    (kind === 'liquid' ? readNutriment(nutriments, 'energy_100ml') : null) ??
+    readNutriment(nutriments, 'energy_100g');
 
   if (kilojoules !== null) {
     return kilojoules / KJ_PER_KCAL;
@@ -138,21 +183,43 @@ export function parseOpenFoodFactsProduct(
 ): ParseResult {
   const nutriments = raw.nutriments;
   const servingQuantityG = readServingQuantityG(raw);
+  const productName =
+    [
+      raw.product_name,
+      raw.product_name_fr,
+      raw.product_name_en,
+      raw.product_name_ar,
+      raw.generic_name,
+    ]
+      .map(readString)
+      .find((candidate) => candidate.length > 0) ?? '';
+  const kind = classifyProductKind(raw.quantity, raw.categories_tags, productName);
 
-  const kcal = resolveKcal(nutriments, servingQuantityG);
+  const kcal = resolveKcal(nutriments, servingQuantityG, kind);
   const protein = resolveNutrient(
     nutriments,
     'proteins_100g',
+    'proteins_100ml',
     'proteins_serving',
     servingQuantityG,
+    kind,
   );
   const carbs = resolveNutrient(
     nutriments,
     'carbohydrates_100g',
+    'carbohydrates_100ml',
     'carbohydrates_serving',
     servingQuantityG,
+    kind,
   );
-  const fat = resolveNutrient(nutriments, 'fat_100g', 'fat_serving', servingQuantityG);
+  const fat = resolveNutrient(
+    nutriments,
+    'fat_100g',
+    'fat_100ml',
+    'fat_serving',
+    servingQuantityG,
+    kind,
+  );
 
   if (kcal === null || protein === null || carbs === null || fat === null) {
     return { ok: false, error: { code: 'INCOMPLETE_DATA' } };
@@ -176,20 +243,12 @@ export function parseOpenFoodFactsProduct(
 
   const countriesTags = readCountriesTags(raw.countries_tags);
   const brand = readString(raw.brands);
-  const name =
-    [
-      raw.product_name,
-      raw.product_name_fr,
-      raw.product_name_en,
-      raw.product_name_ar,
-      raw.generic_name,
-    ]
-      .map(readString)
-      .find((candidate) => candidate.length > 0) ?? `${brand ? `${brand} ` : ''}${barcode}`;
+  const name = productName || `${brand ? `${brand} ` : ''}${barcode}`;
   const imageUrl = readHttpsUrl(raw.image_front_small_url) ?? readHttpsUrl(raw.image_front_url);
   const servingSize = readString(raw.serving_size);
 
   const product: ParsedProduct = {
+    kind,
     barcode,
     name,
     ...(imageUrl ? { imageUrl } : {}),

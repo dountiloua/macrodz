@@ -30,7 +30,7 @@ export type {
   ManualProductValidationErrors,
   ManualProductValidationResult,
 } from './manual-product';
-export { parseOpenFoodFactsProduct, parseServingSizeG } from './parser';
+export { classifyProductKind, parseOpenFoodFactsProduct, parseServingSizeG } from './parser';
 export { DEFAULT_SCAN_COOLDOWN_MS, shouldAcceptBarcode } from './scan-throttle';
 export {
   buildManualProductForm,

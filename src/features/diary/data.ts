@@ -60,7 +60,7 @@ export async function listDiaryFoodHistory(
     for (let offset = 0; ; offset += pageSize) {
       const { data, error } = await client
         .from('food_logs')
-        .select('product_name, log_date, created_at, grams, kcal, protein, carbs, fat')
+        .select('product_name, log_date, created_at, grams, kcal, protein, carbs, fat, unit')
         .eq('user_id', userId)
         .lte('log_date', throughDate)
         .order('log_date', { ascending: false })
@@ -265,6 +265,7 @@ export function createDiaryEntryValues(input: {
       protein: food.protein,
       carbs: food.carbs,
       fat: food.fat,
+      kind: food.kind,
       servingQuantityG: food.servingQuantityG,
       densityGPerMl: food.densityGPerMl,
     },
@@ -289,6 +290,7 @@ export function createDiaryEntryValues(input: {
     meal,
     quantity,
     unit,
+    // For liquid foods this database column stores millilitres, not grams.
     grams,
     kcal,
     protein,

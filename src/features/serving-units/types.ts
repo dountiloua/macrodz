@@ -1,6 +1,9 @@
 import type { ServingUnit } from './constants';
 
+export type ProductKind = 'liquid' | 'solid';
+
 export type ServingProduct = {
+  kind?: ProductKind;
   kcal: number;
   protein: number;
   carbs: number;

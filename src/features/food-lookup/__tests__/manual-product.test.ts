@@ -9,6 +9,7 @@ import {
 
 describe('validateManualProduct', () => {
   const validInput: ManualProductInput = {
+    kind: 'solid',
     barcode: '6131234567890',
     name: 'Yaourt aux fruits Soummam',
     brand: 'Soummam',
@@ -26,6 +27,7 @@ describe('validateManualProduct', () => {
     if (!result.ok) return;
 
     expect(result.product).toEqual({
+      kind: 'solid',
       barcode: '6131234567890',
       name: 'Yaourt aux fruits Soummam',
       brand: 'Soummam',
@@ -57,6 +59,14 @@ describe('validateManualProduct', () => {
     expect(result.product.carbs).toBe(12);
     expect(result.product.fat).toBe(2.5);
     expect(result.product.servingQuantityG).toBe(125.5);
+  });
+
+  it('retains the selected liquid kind and labels serving sizes in millilitres', () => {
+    const result = validateManualProduct({ ...validInput, kind: 'liquid' });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.product).toMatchObject({ kind: 'liquid', servingSize: '125 ml' });
   });
 
   it('detects non-Algerian barcodes', () => {

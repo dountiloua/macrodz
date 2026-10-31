@@ -125,6 +125,7 @@ export default function DiaryScreen() {
       protein: item.food.protein,
       carbs: item.food.carbs,
       fat: item.food.fat,
+      kind: item.food.kind,
       ...(item.food.servingQuantityG === undefined
         ? {}
         : { servingQuantityG: item.food.servingQuantityG }),
@@ -154,21 +155,26 @@ export default function DiaryScreen() {
 
   function openLog(entry: DiaryEntry) {
     const gramsFactor = entry.grams > 0 ? 100 / entry.grams : 0;
+    const isLiquid = entry.unit === 'ml' || entry.unit === 'cl' || entry.unit === 'l';
     const food: DiaryFood = {
       name: entry.product_name,
       kcal: entry.kcal * gramsFactor,
       protein: entry.protein * gramsFactor,
       carbs: entry.carbs * gramsFactor,
       fat: entry.fat * gramsFactor,
+      kind: isLiquid ? 'liquid' : 'solid',
       productId: entry.product_id ?? undefined,
       ...(entry.unit === 'unit' || entry.unit === 'pot'
         ? { servingQuantityG: entry.grams / entry.quantity }
         : {}),
-      ...(entry.unit === 'ml' ||
-      entry.unit === 'tsp' ||
-      entry.unit === 'tbsp' ||
-      entry.unit === 'glass' ||
-      entry.unit === 'cup'
+      ...(!isLiquid &&
+      (entry.unit === 'ml' ||
+        entry.unit === 'cl' ||
+        entry.unit === 'l' ||
+        entry.unit === 'tsp' ||
+        entry.unit === 'tbsp' ||
+        entry.unit === 'glass' ||
+        entry.unit === 'cup')
         ? {
             densityGPerMl:
               entry.grams /
@@ -399,7 +405,8 @@ export default function DiaryScreen() {
                       {suggestion.items.map((item) => (
                         <View key={`${item.food.id}-${item.grams}`} style={styles.suggestionItem}>
                           <Text style={styles.suggestionPortion}>
-                            {item.food.name} · {item.grams} {t('common.units.g')}
+                            {item.food.name} · {item.grams}{' '}
+                            {t(`common.units.${item.food.kind === 'liquid' ? 'ml' : 'g'}`)}
                           </Text>
                           <Button
                             label={t('closeMacros.addFood', { food: item.food.name })}
@@ -462,7 +469,9 @@ export default function DiaryScreen() {
                       <Text style={styles.entryName}>{entry.product_name}</Text>
                       <Text style={styles.entryQuantity}>
                         {entry.quantity} {t(`common.units.${entry.unit}`)} · {entry.grams}{' '}
-                        {t('common.units.g')}
+                        {t(
+                          `common.units.${entry.unit === 'ml' || entry.unit === 'cl' || entry.unit === 'l' ? 'ml' : 'g'}`,
+                        )}
                       </Text>
                       <Text style={styles.entryQuantity}>
                         {formatDiaryEntryMacros(entry, {

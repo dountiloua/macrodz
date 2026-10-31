@@ -1,4 +1,5 @@
 import { roundTo } from '@/lib/math';
+import type { ProductKind } from '../serving-units';
 
 import { getDefaultCache } from './lookup';
 import type { ParsedProduct, ProductCache } from './types';
@@ -7,6 +8,7 @@ const MAX_KCAL_PER_100G = 900;
 const MAX_MACRO_SUM_PER_100G = 100;
 
 export type ManualProductInput = {
+  kind?: ProductKind;
   barcode: string;
   name: string;
   brand?: string;
@@ -111,8 +113,10 @@ export function validateManualProduct(input: ManualProductInput): ManualProductV
   }
 
   const brand = input.brand?.trim();
+  const kind = input.kind ?? 'solid';
 
   const product: ParsedProduct = {
+    kind,
     barcode,
     name,
     brand: brand && brand.length > 0 ? brand : undefined,
@@ -121,7 +125,9 @@ export function validateManualProduct(input: ManualProductInput): ManualProductV
     carbs: roundTo(rawCarbs!, 1),
     fat: roundTo(rawFat!, 1),
     servingQuantityG,
-    servingSize: servingQuantityG ? `${servingQuantityG} g` : undefined,
+    servingSize: servingQuantityG
+      ? `${servingQuantityG} ${kind === 'liquid' ? 'ml' : 'g'}`
+      : undefined,
     countriesTags: [],
     isLikelyAlgerian: barcode.startsWith('613'),
     source: 'user',

@@ -14,6 +14,7 @@ export const OFF_FIELDS = [
   'serving_quantity',
   'quantity',
   'nutriments',
+  'categories_tags',
   'countries_tags',
 ].join(',');
 

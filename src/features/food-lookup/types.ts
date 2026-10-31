@@ -1,8 +1,9 @@
-import type { ServingProduct } from '../serving-units/types';
+import type { ProductKind, ServingProduct } from '../serving-units/types';
 
 export type ProductSource = 'off' | 'user';
 
 export type ParsedProduct = ServingProduct & {
+  kind: ProductKind;
   barcode: string;
   name: string;
   imageUrl?: string;
@@ -50,6 +51,7 @@ export type OpenFoodFactsRawProduct = {
   serving_size?: string;
   serving_quantity?: string | number;
   quantity?: string;
+  categories_tags?: unknown;
   countries_tags?: unknown;
   nutriments?: Record<string, unknown>;
 };

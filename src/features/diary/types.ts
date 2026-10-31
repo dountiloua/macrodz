@@ -1,4 +1,4 @@
-import type { ServingUnit } from '../serving-units';
+import type { ProductKind, ServingUnit } from '../serving-units';
 
 export const MEALS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 export type Meal = (typeof MEALS)[number];
@@ -39,11 +39,12 @@ export type DiaryEntryValues = Pick<
 export type DiaryFoodHistorySnapshot = Pick<
   DiaryEntry,
   'product_name' | 'log_date' | 'created_at' | 'grams' | 'kcal' | 'protein' | 'carbs' | 'fat'
->;
+> & { unit?: ServingUnit };
 
 export type DiaryTotals = Pick<DiaryEntry, 'kcal' | 'protein' | 'carbs' | 'fat'>;
 
 export type DiaryFood = {
+  kind?: ProductKind;
   name: string;
   kcal: number;
   protein: number;
@@ -66,6 +67,7 @@ export type LogFoodParams = {
   productId?: string;
   servingQuantityG?: string;
   densityGPerMl?: string;
+  kind?: ProductKind;
   entryId?: string;
   quantity?: string;
   unit?: string;

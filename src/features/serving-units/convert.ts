@@ -44,9 +44,24 @@ export function convertServing(
     return { ok: false, error: 'INVALID_PRODUCT' };
   }
 
+  if (
+    (product.kind === 'liquid' && unit !== 'ml' && unit !== 'cl' && unit !== 'l') ||
+    (product.kind !== 'liquid' && (unit === 'cl' || unit === 'l'))
+  ) {
+    return { ok: false, error: 'UNIT_NOT_AVAILABLE' };
+  }
+
   let grams: number;
 
-  if (unit === 'g') {
+  if (product.kind === 'liquid') {
+    if (unit === 'ml') {
+      grams = quantity;
+    } else if (unit === 'cl' || unit === 'l') {
+      grams = quantity * VOLUME_UNIT_ML[unit];
+    } else {
+      return { ok: false, error: 'UNIT_NOT_AVAILABLE' };
+    }
+  } else if (unit === 'g') {
     grams = quantity;
   } else if (unit === 'unit' || unit === 'pot') {
     if (product.servingQuantityG === undefined) {
@@ -58,6 +73,8 @@ export function convertServing(
     }
 
     grams = quantity * product.servingQuantityG;
+  } else if (unit === 'cl' || unit === 'l') {
+    return { ok: false, error: 'UNIT_NOT_AVAILABLE' };
   } else {
     const density = product.densityGPerMl ?? DEFAULT_DENSITY_G_PER_ML;
 
@@ -85,6 +102,10 @@ export function convertServing(
 }
 
 export function getAvailableServingUnits(product: ServingProduct, productName = ''): ServingUnit[] {
+  if (product.kind === 'liquid') {
+    return ['ml', 'cl', 'l'];
+  }
+
   const hasServingQuantity =
     product.servingQuantityG !== undefined &&
     Number.isFinite(product.servingQuantityG) &&
@@ -99,6 +120,6 @@ export function getAvailableServingUnits(product: ServingProduct, productName = 
     if (unit === 'ml' || unit === 'tbsp' || unit === 'tsp' || unit === 'glass' || unit === 'cup') {
       return volumeUnitsAllowed;
     }
-    return true;
+    return unit !== 'cl' && unit !== 'l';
   });
 }

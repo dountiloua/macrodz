@@ -23,6 +23,7 @@ export { sumDiaryTotals } from './totals';
 export {
   formatDiaryEntryMacros,
   getDefaultLogAmount,
+  getLogFoodUnitOptions,
   getNutritionPer100g,
   hasUsableNutrition,
 } from './nutrition';

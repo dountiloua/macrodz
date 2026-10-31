@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
@@ -30,6 +30,7 @@ const initialProduct: ManualProductInput = {
   protein: '',
   carbs: '',
   fat: '',
+  kind: 'solid',
   servingQuantityG: '',
 };
 
@@ -91,6 +92,7 @@ export default function ManualFoodScreen() {
           protein: product.protein,
           carbs: product.carbs,
           fat: product.fat,
+          kind: product.kind,
           servingQuantityG: product.servingQuantityG,
           productId,
         }),
@@ -107,7 +109,9 @@ export default function ManualFoodScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <Button label={t('common.back')} variant="secondary" onPress={() => router.back()} />
         <Text style={styles.title}>{t('diary.manualFoodTitle')}</Text>
-        <Text style={styles.description}>{t('diary.manualProductInfo')}</Text>
+        <Text style={styles.description}>
+          {t('diary.manualProductInfo', { unit: values.kind === 'liquid' ? '100 ml' : '100 g' })}
+        </Text>
         <TextField
           label={`${t('scan.manualModal.title')} *`}
           value={values.barcode}
@@ -132,6 +136,20 @@ export default function ManualFoodScreen() {
           onChangeText={(value) => setField('brand', value)}
           placeholder={t('scan.manualForm.brandPlaceholder')}
         />
+        <Text style={styles.label}>{t('scan.manualForm.productKindLabel')}</Text>
+        <View style={styles.kindOptions}>
+          {(['solid', 'liquid'] as const).map((kind) => (
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ selected: values.kind === kind }}
+              key={kind}
+              onPress={() => setField('kind', kind)}
+              style={[styles.kindButton, values.kind === kind ? styles.selectedKind : null]}
+            >
+              <Text style={styles.kindText}>{t(`scan.manualForm.${kind}`)}</Text>
+            </Pressable>
+          ))}
+        </View>
         <TextField
           label={`${t('scan.manualForm.kcalLabel')} *`}
           value={String(values.kcal)}
@@ -157,15 +175,17 @@ export default function ManualFoodScreen() {
           keyboardType="decimal-pad"
         />
         <TextField
-          label={t('scan.manualForm.servingQuantityGLabel')}
+          label={t(
+            values.kind === 'liquid'
+              ? 'scan.manualForm.servingQuantityMlLabel'
+              : 'scan.manualForm.servingQuantityGLabel',
+          )}
           value={String(values.servingQuantityG ?? '')}
           onChangeText={(value) => setField('servingQuantityG', value)}
           keyboardType="decimal-pad"
         />
         {invalidProduct ? <Text style={styles.error}>{t('diary.manualInvalid')}</Text> : null}
-        {nutritionMissing ? (
-          <Text style={styles.error}>{t('diary.nutritionMissing')}</Text>
-        ) : null}
+        {nutritionMissing ? <Text style={styles.error}>{t('diary.nutritionMissing')}</Text> : null}
         {error ? <Text style={styles.error}>{t('diary.saveError')}</Text> : null}
         <Button label={t('diary.saveAndLog')} loading={saving} onPress={() => void save()} />
       </ScrollView>
@@ -182,5 +202,20 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.regular,
     fontSize: typography.caption,
   },
+  label: { color: colors.text, fontFamily: fontFamilies.medium, fontSize: typography.body },
+  kindOptions: { flexDirection: 'row', gap: spacing[2] },
+  kindButton: {
+    minHeight: 48,
+    minWidth: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing[3],
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+  },
+  selectedKind: { borderColor: colors.accent, backgroundColor: colors.accentSurface },
+  kindText: { color: colors.text, fontFamily: fontFamilies.medium, fontSize: typography.caption },
   error: { color: colors.error, fontFamily: fontFamilies.medium, fontSize: typography.caption },
 });

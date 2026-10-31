@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import {
   getDefaultLogAmount,
+  getLogFoodUnitOptions,
   hasUsableNutrition,
   readSingleParam,
   createDiaryEntryValues,
@@ -17,7 +18,6 @@ import type { DiaryFood, Meal } from '@/features/diary/types';
 import { MEALS } from '@/features/diary/types';
 import {
   convertServing,
-  getAvailableServingUnits,
   getProductDensityGPerMl,
   isVolumeServingUnit,
   type ServingUnit,
@@ -39,8 +39,11 @@ export default function LogFoodScreen() {
   const entryId = readSingleParam(params.entryId);
   const servingQuantityG = Number(readSingleParam(params.servingQuantityG));
   const densityGPerMl = Number(readSingleParam(params.densityGPerMl));
+  const kindParam = readSingleParam(params.kind);
+  const kind = kindParam === 'liquid' ? 'liquid' : 'solid';
   const numericParam = (key: string) => Number(readSingleParam(params[key]));
   const food: DiaryFood = {
+    kind,
     name,
     kcal: numericParam('kcal'),
     protein: numericParam('protein'),
@@ -60,28 +63,29 @@ export default function LogFoodScreen() {
       (value) => Number.isFinite(value) && value >= 0,
     );
   const nutritionValid = hasUsableNutrition(food);
+  const units = getLogFoodUnitOptions(food);
   const [initialAmount] = useState(() => {
     const suggested =
       gramsParam !== undefined &&
       Number.isFinite(Number(gramsParam)) &&
       Number(gramsParam) > 0 &&
       Number(gramsParam) <= 10_000
-        ? { quantity: gramsParam, unit: 'g' as const }
+        ? { quantity: gramsParam, unit: kind === 'liquid' ? ('ml' as const) : ('g' as const) }
         : getDefaultLogAmount(
             food.servingQuantityG,
             readSingleParam(params.quantity),
             readSingleParam(params.unit),
+            kind,
           );
-    return getAvailableServingUnits(food, name).includes(suggested.unit)
+    return units.includes(suggested.unit)
       ? suggested
-      : { quantity: '100', unit: 'g' as const };
+      : getDefaultLogAmount(food.servingQuantityG, undefined, undefined, kind);
   });
   const [quantity, setQuantity] = useState(initialAmount.quantity);
   const [unit, setUnit] = useState<ServingUnit>(initialAmount.unit);
   const [error, setError] = useState(false);
   const [saving, setSaving] = useState(false);
   const mutations = useDiaryMutations(user?.id ?? '', date);
-  const units = getAvailableServingUnits(food, name);
   const parsedQuantity = Number(quantity.replace(',', '.'));
   const preview = convertServing(food, parsedQuantity, unit);
   let canSave = false;
@@ -179,7 +183,8 @@ export default function LogFoodScreen() {
             </Pressable>
           ))}
         </View>
-        {isVolumeServingUnit(unit) &&
+        {kind !== 'liquid' &&
+        isVolumeServingUnit(unit) &&
         food.densityGPerMl === undefined &&
         getProductDensityGPerMl(name) === undefined ? (
           <Text style={styles.warning}>{t('diary.approximateVolumeWarning')}</Text>
@@ -190,8 +195,8 @@ export default function LogFoodScreen() {
           {nutritionValid && preview.ok ? (
             <>
               <MetricRow
-                label={t('diary.grams')}
-                value={`${preview.grams} ${t('common.units.g')}`}
+                label={kind === 'liquid' ? t('diary.milliliters') : t('diary.grams')}
+                value={`${preview.grams} ${t(`common.units.${kind === 'liquid' ? 'ml' : 'g'}`)}`}
               />
               <MetricRow
                 label={t('diary.calories')}

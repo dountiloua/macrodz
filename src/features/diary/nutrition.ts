@@ -1,12 +1,16 @@
-import { SERVING_UNITS, type ServingUnit } from '../serving-units';
+import { getAvailableServingUnits, SERVING_UNITS, type ServingUnit } from '../serving-units';
 import type { DiaryEntry, DiaryFood } from './types';
 
 export type LogAmount = { quantity: string; unit: ServingUnit };
 
+export function getLogFoodUnitOptions(food: DiaryFood): ServingUnit[] {
+  return getAvailableServingUnits(food, food.name);
+}
+
 export type NutritionValues = { kcal: number; protein: number; carbs: number; fat: number };
 
 export function getNutritionPer100g(
-  food: Partial<Pick<DiaryFood, 'kcal' | 'protein' | 'carbs' | 'fat'>>,
+  food: Partial<Pick<DiaryFood, 'kcal' | 'protein' | 'carbs' | 'fat' | 'kind'>>,
 ): NutritionValues | null {
   if (
     typeof food.kcal !== 'number' ||
@@ -21,7 +25,11 @@ export function getNutritionPer100g(
     typeof food.fat !== 'number' ||
     !Number.isFinite(food.fat) ||
     food.fat < 0 ||
-    (food.kcal === 0 && food.protein === 0 && food.carbs === 0 && food.fat === 0)
+    (food.kcal === 0 &&
+      food.protein === 0 &&
+      food.carbs === 0 &&
+      food.fat === 0 &&
+      food.kind !== 'liquid')
   ) {
     return null;
   }
@@ -34,7 +42,7 @@ export function getNutritionPer100g(
 }
 
 export function hasUsableNutrition(
-  food: Partial<Pick<DiaryFood, 'kcal' | 'protein' | 'carbs' | 'fat'>>,
+  food: Partial<Pick<DiaryFood, 'kcal' | 'protein' | 'carbs' | 'fat' | 'kind'>>,
 ): boolean {
   return getNutritionPer100g(food) !== null;
 }
@@ -43,6 +51,7 @@ export function getDefaultLogAmount(
   servingQuantityG?: number,
   initialQuantity?: string,
   initialUnit?: string,
+  kind: DiaryFood['kind'] = 'solid',
 ): LogAmount {
   if (initialQuantity !== undefined) {
     const unit =
@@ -53,10 +62,10 @@ export function getDefaultLogAmount(
   }
 
   if (servingQuantityG !== undefined && Number.isFinite(servingQuantityG) && servingQuantityG > 0) {
-    return { quantity: '1', unit: 'unit' };
+    return { quantity: String(servingQuantityG), unit: kind === 'liquid' ? 'ml' : 'g' };
   }
 
-  return { quantity: '100', unit: 'g' };
+  return { quantity: '100', unit: kind === 'liquid' ? 'ml' : 'g' };
 }
 
 export function formatDiaryEntryMacros(

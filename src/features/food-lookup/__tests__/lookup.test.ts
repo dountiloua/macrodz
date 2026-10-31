@@ -23,6 +23,7 @@ const rawProduct = {
 };
 
 const cachedProduct: ParsedProduct = {
+  kind: 'solid',
   barcode: BARCODE,
   name: 'Lait en cache',
   kcal: 64,

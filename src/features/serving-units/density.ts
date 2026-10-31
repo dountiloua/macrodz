@@ -9,10 +9,20 @@ export const PRODUCT_DENSITIES_G_PER_ML = {
 } as const;
 
 const SOLID_PRODUCT_TERMS = ['flour', 'couscous', 'farine', 'semoule'];
-const VOLUME_UNITS: readonly ServingUnit[] = ['ml', 'tbsp', 'tsp', 'cup', 'glass'];
+const VOLUME_UNITS: readonly ServingUnit[] = ['ml', 'cl', 'l', 'tbsp', 'tsp', 'cup', 'glass'];
 
 export function getProductDensityGPerMl(productName: string): number | undefined {
   const normalizedName = productName.trim().toLowerCase();
+  if (/(?:huile d['’]olive|olive oil|زيت الزيتون)/u.test(normalizedName)) {
+    return PRODUCT_DENSITIES_G_PER_ML['olive oil'];
+  }
+  if (/(?:vegetable oil|huile végétale|huile vegetale|زيت نباتي)/u.test(normalizedName)) {
+    return PRODUCT_DENSITIES_G_PER_ML['vegetable oil'];
+  }
+  if (/(?:\bhoney\b|\bmiel\b|عسل)/u.test(normalizedName)) {
+    return PRODUCT_DENSITIES_G_PER_ML.honey;
+  }
+
   const matchingProduct = (
     Object.keys(PRODUCT_DENSITIES_G_PER_ML) as (keyof typeof PRODUCT_DENSITIES_G_PER_ML)[]
   ).find((name) => normalizedName.includes(name));

@@ -41,6 +41,7 @@ export default function AddFoodScreen() {
         protein: food.protein,
         carbs: food.carbs,
         fat: food.fat,
+        kind: food.kind,
         servingQuantityG: food.servingQuantityG,
       }),
     });
@@ -58,6 +59,16 @@ export default function AddFoodScreen() {
               router.push({
                 pathname: '/scan',
                 params: { diary: 'true', date, meal: isMeal(meal) ? meal : 'snack' },
+              })
+            }
+          />
+          <Button
+            label={t('buildMeal.entryPoint')}
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: './build-meal',
+                params: { date, meal: isMeal(meal) ? meal : 'snack' },
               })
             }
           />
@@ -95,12 +106,15 @@ export default function AddFoodScreen() {
                 <Text style={styles.foodName}>{food.names[language]}</Text>
                 {nutrition ? (
                   <Text style={styles.foodMacros}>
-                    {t('diary.nutritionPer100g', {
-                      kcal: Math.round(nutrition.kcal),
-                      protein: nutrition.protein,
-                      carbs: nutrition.carbs,
-                      fat: nutrition.fat,
-                    })}
+                    {t(
+                      food.kind === 'liquid' ? 'diary.nutritionPer100ml' : 'diary.nutritionPer100g',
+                      {
+                        kcal: Math.round(nutrition.kcal),
+                        protein: nutrition.protein,
+                        carbs: nutrition.carbs,
+                        fat: nutrition.fat,
+                      },
+                    )}
                   </Text>
                 ) : (
                   <Text style={styles.foodMacros}>{t('diary.nutritionMissing')}</Text>
