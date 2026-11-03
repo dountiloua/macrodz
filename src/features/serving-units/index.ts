@@ -1,11 +1,17 @@
 export {
-  DEFAULT_DENSITY_G_PER_ML,
   NUTRIENT_BASIS_G,
   SERVING_UNITS,
   VOLUME_UNIT_ML,
 } from './constants';
 export type { ServingUnit } from './constants';
-export { convertServing, getAvailableServingUnits } from './convert';
+export {
+  convertServing,
+  getAvailableServingUnits,
+  getEquivalentUnits,
+  getCalculatorUnits,
+  getEquivalentAmounts,
+  getVolumeUnitMl,
+} from './convert';
 export {
   getProductDensityGPerMl,
   isSolidWithoutDensity,

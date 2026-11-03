@@ -22,7 +22,7 @@ function isMeal(value: string | undefined): value is Meal {
   return value !== undefined && (MEALS as readonly string[]).includes(value);
 }
 
-const initialProduct: ManualProductInput = {
+const emptyProduct: ManualProductInput = {
   barcode: '',
   name: '',
   brand: '',
@@ -30,6 +30,11 @@ const initialProduct: ManualProductInput = {
   protein: '',
   carbs: '',
   fat: '',
+  sugars: '',
+  fiber: '',
+  saturatedFat: '',
+  salt: '',
+  alcohol: '',
   kind: 'solid',
   servingQuantityG: '',
 };
@@ -37,12 +42,33 @@ const initialProduct: ManualProductInput = {
 export default function ManualFoodScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const params = useLocalSearchParams<{ date?: string; meal?: string }>();
+  const params = useLocalSearchParams<Record<string, string | string[]>>();
   const date = readSingleParam(params.date) ?? '';
   const mealValue = readSingleParam(params.meal);
   const meal = isMeal(mealValue) ? mealValue : 'snack';
+  const correction = readSingleParam(params.correction) === 'true';
   const user = useAuthStore((state) => state.user);
-  const [values, setValues] = useState<ManualProductInput>(initialProduct);
+  const [values, setValues] = useState<ManualProductInput>(() => ({
+    ...emptyProduct,
+    ...(correction
+      ? {
+          barcode: readSingleParam(params.barcode) ?? '',
+          name: readSingleParam(params.name) ?? '',
+          brand: readSingleParam(params.brand) ?? '',
+          kcal: readSingleParam(params.kcal) ?? '',
+          protein: readSingleParam(params.protein) ?? '',
+          carbs: readSingleParam(params.carbs) ?? '',
+          fat: readSingleParam(params.fat) ?? '',
+          kind: readSingleParam(params.kind) === 'liquid' ? 'liquid' : 'solid',
+          servingQuantityG: readSingleParam(params.servingQuantityG) ?? '',
+          sugars: readSingleParam(params.sugars) ?? '',
+          fiber: readSingleParam(params.fiber) ?? '',
+          saturatedFat: readSingleParam(params.saturatedFat) ?? '',
+          salt: readSingleParam(params.salt) ?? '',
+          alcohol: readSingleParam(params.alcohol) ?? '',
+        }
+      : {}),
+  }));
   const [invalidBarcode, setInvalidBarcode] = useState(false);
   const [invalidProduct, setInvalidProduct] = useState(false);
   const [nutritionMissing, setNutritionMissing] = useState(false);
@@ -56,8 +82,9 @@ export default function ManualFoodScreen() {
 
   async function save() {
     const validation = validateManualProduct(values);
-    if (!validation.ok || !/^\d{8,14}$/.test(values.barcode.trim()) || !user) {
-      setInvalidBarcode(!/^\d{8,14}$/.test(values.barcode.trim()));
+    const barcodeIsInvalid = !correction && !/^\d{8,14}$/.test(values.barcode.trim());
+    if (!validation.ok || barcodeIsInvalid || !user) {
+      setInvalidBarcode(barcodeIsInvalid);
       setInvalidProduct(!validation.ok);
       setNutritionMissing(false);
       setError(!user);
@@ -74,28 +101,42 @@ export default function ManualFoodScreen() {
     setError(false);
     try {
       const product = validation.product;
-      const productId = await insertUserProduct(user.id, {
-        name: product.name,
-        brand: product.brand,
-        barcode: product.barcode,
-        kcal: product.kcal,
-        protein: product.protein,
-        carbs: product.carbs,
-        fat: product.fat,
-        servingQuantityG: product.servingQuantityG,
-      });
+      const productId = correction
+        ? readSingleParam(params.productId)
+        : await insertUserProduct(user.id, {
+            name: product.name,
+            brand: product.brand,
+            barcode: product.barcode,
+            kcal: product.kcal,
+            protein: product.protein,
+            carbs: product.carbs,
+            fat: product.fat,
+            servingQuantityG: product.servingQuantityG,
+          });
       router.replace({
         pathname: '/log-food',
-        params: buildLogFoodParams(date, meal, {
-          name: product.name,
-          kcal: product.kcal,
-          protein: product.protein,
-          carbs: product.carbs,
-          fat: product.fat,
-          kind: product.kind,
-          servingQuantityG: product.servingQuantityG,
-          productId,
-        }),
+        params: {
+          ...buildLogFoodParams(date, meal, {
+            name: product.name,
+            brand: product.brand,
+            barcode: product.barcode,
+            kcal: product.kcal,
+            protein: product.protein,
+            carbs: product.carbs,
+            fat: product.fat,
+            sugars: product.sugars,
+            fiber: product.fiber,
+            saturatedFat: product.saturatedFat,
+            salt: product.salt,
+            alcohol: product.alcohol,
+            kind: product.kind,
+            servingQuantityG: product.servingQuantityG,
+            productId,
+            source: product.source,
+            imageUrl: readSingleParam(params.imageUrl) ?? undefined,
+          }),
+          productSheet: 'true',
+        },
       });
     } catch {
       setError(true);
@@ -174,6 +215,15 @@ export default function ManualFoodScreen() {
           onChangeText={(value) => setField('fat', value)}
           keyboardType="decimal-pad"
         />
+        {(['sugars', 'fiber', 'saturatedFat', 'salt', 'alcohol'] as const).map((field) => (
+          <TextField
+            key={field}
+            label={t(`diary.productFlow.nutrients.${field}`)}
+            value={String(values[field] ?? '')}
+            onChangeText={(value) => setField(field, value)}
+            keyboardType="decimal-pad"
+          />
+        ))}
         <TextField
           label={t(
             values.kind === 'liquid'

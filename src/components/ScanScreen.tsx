@@ -36,7 +36,6 @@ import {
 } from '@/features/food-lookup';
 import {
   buildManualProductForm,
-  getInitialServingSelection,
   normalizeManualBarcode,
 } from '@/features/food-lookup/scan-handlers';
 import {
@@ -108,6 +107,11 @@ export default function ScanFlow() {
     protein: '',
     carbs: '',
     fat: '',
+    sugars: '',
+    fiber: '',
+    saturatedFat: '',
+    salt: '',
+    alcohol: '',
     kind: 'solid',
     servingQuantityG: '',
   });
@@ -122,30 +126,15 @@ export default function ScanFlow() {
   };
 
   const handleProductLoaded = (loadedProduct: ParsedProduct, productId?: string) => {
-    setProduct(loadedProduct);
-    setImageFailed(false);
-    if (diaryFlow && hasUsableNutrition(loadedProduct)) {
-      router.replace({
+    setProduct(null);
+    setMode('scanning');
+    router.push({
         pathname: '/log-food',
-        params: buildLogFoodParams(logDate, meal, {
-          name: loadedProduct.name,
-          kcal: loadedProduct.kcal,
-          protein: loadedProduct.protein,
-          carbs: loadedProduct.carbs,
-          fat: loadedProduct.fat,
-          kind: loadedProduct.kind,
-          servingQuantityG: loadedProduct.servingQuantityG,
-          densityGPerMl: loadedProduct.densityGPerMl,
-          productId,
-        }),
+        params: {
+          ...buildLogFoodParams(logDate, meal, { ...loadedProduct, productId }),
+          productSheet: 'true',
+        },
       });
-      return;
-    }
-    const available = getAvailableServingUnits(loadedProduct, loadedProduct.name);
-    const initialSelection = getInitialServingSelection(loadedProduct, available);
-    setSelectedUnit(initialSelection.unit);
-    setQuantityInput(initialSelection.quantity);
-    setMode('product');
   };
 
   const performLookup = async (barcode: string) => {
@@ -245,18 +234,12 @@ export default function ScanFlow() {
           servingQuantityG: product.servingQuantityG,
           densityGPerMl: product.densityGPerMl,
         });
-        router.replace({
+        router.push({
           pathname: '/log-food',
-          params: buildLogFoodParams(logDate, meal, {
-            name: product.name,
-            kcal: product.kcal,
-            protein: product.protein,
-            carbs: product.carbs,
-            fat: product.fat,
-            kind: product.kind,
-            servingQuantityG: product.servingQuantityG,
-            productId,
-          }),
+          params: {
+            ...buildLogFoodParams(logDate, meal, { ...product, productId }),
+            productSheet: 'true',
+          },
         });
         return;
       }
@@ -575,6 +558,20 @@ export default function ScanFlow() {
                 <Text style={styles.errorText}>{t('scan.manualForm.errors.macrosExceed100')}</Text>
               )}
             </View>
+
+            {(['sugars', 'fiber', 'saturatedFat', 'salt', 'alcohol'] as const).map((field) => (
+              <View key={field} style={styles.formGroup}>
+                <TextField
+                  label={t(`diary.productFlow.nutrients.${field}`)}
+                  value={String(manualForm[field] ?? '')}
+                  onChangeText={(text) => {
+                    setManualNutritionError(false);
+                    setManualForm((previous) => ({ ...previous, [field]: text }));
+                  }}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            ))}
 
             {/* Optional Portion Size */}
             <Text style={styles.sectionHeading}>{t('scan.manualForm.servingSection')}</Text>

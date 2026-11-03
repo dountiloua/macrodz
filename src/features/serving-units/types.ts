@@ -4,10 +4,16 @@ export type ProductKind = 'liquid' | 'solid';
 
 export type ServingProduct = {
   kind?: ProductKind;
+  name?: string;
   kcal: number;
   protein: number;
   carbs: number;
   fat: number;
+  sugars?: number;
+  fiber?: number;
+  saturatedFat?: number;
+  salt?: number;
+  alcohol?: number;
   servingQuantityG?: number;
   densityGPerMl?: number;
 };
@@ -22,6 +28,11 @@ export type ServingConversionSuccess = {
   protein: number;
   carbs: number;
   fat: number;
+  sugars?: number;
+  fiber?: number;
+  saturatedFat?: number;
+  salt?: number;
+  alcohol?: number;
 };
 
 export type ServingConversionFailure = {

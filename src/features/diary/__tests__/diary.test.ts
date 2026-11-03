@@ -20,6 +20,7 @@ import {
   getDefaultLogAmount,
   getLogFoodUnitOptions,
   getNutritionPer100g,
+  isDiaryEntryLiquid,
   hasUsableNutrition,
 } from '../nutrition';
 import type { DiaryEntry, DiaryEntryValues } from '../types';
@@ -64,6 +65,13 @@ function mockClient(response: { data?: unknown; error?: { message: string } | nu
 }
 
 describe('diary calculations', () => {
+  it('distinguishes liquid volume units from density-adjusted solid volumes', () => {
+    expect(isDiaryEntryLiquid({ unit: 'ml', quantity: 250, grams: 250 })).toBe(true);
+    expect(isDiaryEntryLiquid({ unit: 'ml', quantity: 100, grams: 92 })).toBe(false);
+    expect(isDiaryEntryLiquid({ unit: 'cl', quantity: 1, grams: 10 })).toBe(true);
+    expect(isDiaryEntryLiquid({ unit: 'ml', grams: 250 })).toBe(true);
+  });
+
   it('exposes complete per-100g nutrition and rejects missing or all-zero nutrition', () => {
     expect(getNutritionPer100g({ kcal: 200, protein: 10, carbs: 20, fat: 5 })).toEqual({
       kcal: 200,
@@ -101,7 +109,7 @@ describe('diary calculations', () => {
         carbs: 5,
         fat: 3,
       }),
-    ).toEqual(['ml', 'cl', 'l']);
+    ).toEqual(['ml', 'cl', 'dl', 'l', 'fl_oz', 'cup', 'tbsp', 'tsp', 'glass']);
     expect(
       getLogFoodUnitOptions({
         name: 'Pasta',
@@ -111,7 +119,7 @@ describe('diary calculations', () => {
         carbs: 70,
         fat: 2,
       }),
-    ).toEqual(['g', 'ml', 'tbsp', 'tsp', 'glass', 'cup']);
+    ).toEqual(['g', 'kg', 'oz']);
     expect(
       formatDiaryEntryMacros(row, {
         protein: 'Protein',
@@ -119,7 +127,7 @@ describe('diary calculations', () => {
         fat: 'Fat',
         unit: 'g',
       }),
-    ).toBe('Protein 8.5 g · Carbs 54 g · Fat 1.5 g');
+    ).toBe('Protein 8.5 g · Carbs 54.0 g · Fat 1.5 g');
     const food = { kcal: 200, protein: 10, carbs: 20, fat: 5, servingQuantityG: 50 };
     const initial = getDefaultLogAmount(food.servingQuantityG);
     expect(convertServing(food, Number(initial.quantity), initial.unit)).toEqual({

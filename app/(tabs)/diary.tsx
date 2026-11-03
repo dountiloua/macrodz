@@ -18,7 +18,7 @@ import { Screen } from '@/components/ui/Screen';
 import { InfoCallout } from '@/components/ui/InfoCallout';
 import { syncProfileAndUpdatePending } from '@/features/auth/sync-profile';
 import { shiftLocalDate, toLocalDateString, parseLocalDate } from '@/features/diary';
-import { formatDiaryEntryMacros } from '@/features/diary/nutrition';
+import { formatDiaryEntryMacros, isDiaryEntryLiquid } from '@/features/diary/nutrition';
 import { useDiaryEntries, useDiaryFoodHistory, useDiaryMutations } from '@/features/diary/queries';
 import { buildLogFoodParams } from '@/features/diary/navigation';
 import { sumDiaryTotals } from '@/features/diary/totals';
@@ -33,7 +33,7 @@ import { GENERIC_FOODS } from '@/features/generic-foods';
 import { useAuthStore } from '@/store/auth-store';
 import { useProfileStore } from '@/store/profile-store';
 import { colors, fontFamilies, radii, spacing, typography } from '@/theme/tokens';
-import { VOLUME_UNIT_ML } from '@/features/serving-units';
+import { getVolumeUnitMl } from '@/features/serving-units';
 
 const EMPTY_DIARY_ENTRIES: DiaryEntry[] = [];
 
@@ -155,7 +155,8 @@ export default function DiaryScreen() {
 
   function openLog(entry: DiaryEntry) {
     const gramsFactor = entry.grams > 0 ? 100 / entry.grams : 0;
-    const isLiquid = entry.unit === 'ml' || entry.unit === 'cl' || entry.unit === 'l';
+    const isLiquid = isDiaryEntryLiquid(entry);
+    const volumeUnitMl = getVolumeUnitMl(entry.unit);
     const food: DiaryFood = {
       name: entry.product_name,
       kcal: entry.kcal * gramsFactor,
@@ -167,19 +168,8 @@ export default function DiaryScreen() {
       ...(entry.unit === 'unit' || entry.unit === 'pot'
         ? { servingQuantityG: entry.grams / entry.quantity }
         : {}),
-      ...(!isLiquid &&
-      (entry.unit === 'ml' ||
-        entry.unit === 'cl' ||
-        entry.unit === 'l' ||
-        entry.unit === 'tsp' ||
-        entry.unit === 'tbsp' ||
-        entry.unit === 'glass' ||
-        entry.unit === 'cup')
-        ? {
-            densityGPerMl:
-              entry.grams /
-              (entry.quantity * (entry.unit === 'ml' ? 1 : VOLUME_UNIT_ML[entry.unit])),
-          }
+      ...(!isLiquid && volumeUnitMl !== undefined
+        ? { densityGPerMl: entry.grams / (entry.quantity * volumeUnitMl) }
         : {}),
     };
     router.push({
@@ -468,10 +458,9 @@ export default function DiaryScreen() {
                     >
                       <Text style={styles.entryName}>{entry.product_name}</Text>
                       <Text style={styles.entryQuantity}>
-                        {entry.quantity} {t(`common.units.${entry.unit}`)} · {entry.grams}{' '}
-                        {t(
-                          `common.units.${entry.unit === 'ml' || entry.unit === 'cl' || entry.unit === 'l' ? 'ml' : 'g'}`,
-                        )}
+                        {entry.quantity} {t(`common.units.${entry.unit}`)} ·{' '}
+                        {entry.grams.toFixed(1)}{' '}
+                        {t(`common.units.${isDiaryEntryLiquid(entry) ? 'ml' : 'g'}`)}
                       </Text>
                       <Text style={styles.entryQuantity}>
                         {formatDiaryEntryMacros(entry, {

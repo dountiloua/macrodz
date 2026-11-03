@@ -1,4 +1,5 @@
 import { getAvailableServingUnits, SERVING_UNITS, type ServingUnit } from '../serving-units';
+import { getVolumeUnitMl } from '../serving-units';
 import type { DiaryEntry, DiaryFood } from './types';
 
 export type LogAmount = { quantity: string; unit: ServingUnit };
@@ -8,6 +9,33 @@ export function getLogFoodUnitOptions(food: DiaryFood): ServingUnit[] {
 }
 
 export type NutritionValues = { kcal: number; protein: number; carbs: number; fat: number };
+
+export function isDiaryEntryLiquid(entry: {
+  unit?: ServingUnit;
+  quantity?: number;
+  grams: number;
+}): boolean {
+  if (
+    entry.unit === 'cl' ||
+    entry.unit === 'dl' ||
+    entry.unit === 'l' ||
+    entry.unit === 'fl_oz'
+  ) {
+    return true;
+  }
+  if (
+    entry.unit === undefined ||
+    !['ml', 'cup', 'tbsp', 'tsp', 'glass'].includes(entry.unit)
+  ) {
+    return false;
+  }
+  if (entry.quantity === undefined) return entry.unit === 'ml';
+  if (entry.quantity <= 0) return false;
+  const milliliters = getVolumeUnitMl(entry.unit);
+  if (milliliters === undefined) return false;
+  const density = entry.grams / (entry.quantity * milliliters);
+  return Number.isFinite(density) && Math.abs(density - 1) <= 0.02;
+}
 
 export function getNutritionPer100g(
   food: Partial<Pick<DiaryFood, 'kcal' | 'protein' | 'carbs' | 'fat' | 'kind'>>,
@@ -72,5 +100,5 @@ export function formatDiaryEntryMacros(
   entry: Pick<DiaryEntry, 'protein' | 'carbs' | 'fat'>,
   labels: { protein: string; carbs: string; fat: string; unit: string },
 ) {
-  return `${labels.protein} ${entry.protein} ${labels.unit} · ${labels.carbs} ${entry.carbs} ${labels.unit} · ${labels.fat} ${entry.fat} ${labels.unit}`;
+  return `${labels.protein} ${entry.protein.toFixed(1)} ${labels.unit} · ${labels.carbs} ${entry.carbs.toFixed(1)} ${labels.unit} · ${labels.fat} ${entry.fat.toFixed(1)} ${labels.unit}`;
 }

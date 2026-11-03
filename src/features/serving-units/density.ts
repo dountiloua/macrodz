@@ -9,7 +9,17 @@ export const PRODUCT_DENSITIES_G_PER_ML = {
 } as const;
 
 const SOLID_PRODUCT_TERMS = ['flour', 'couscous', 'farine', 'semoule'];
-const VOLUME_UNITS: readonly ServingUnit[] = ['ml', 'cl', 'l', 'tbsp', 'tsp', 'cup', 'glass'];
+const VOLUME_UNITS: readonly ServingUnit[] = [
+  'ml',
+  'cl',
+  'dl',
+  'l',
+  'fl_oz',
+  'tbsp',
+  'tsp',
+  'cup',
+  'glass',
+];
 
 export function getProductDensityGPerMl(productName: string): number | undefined {
   const normalizedName = productName.trim().toLowerCase();

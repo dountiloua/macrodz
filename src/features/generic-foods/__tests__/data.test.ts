@@ -12,7 +12,17 @@ describe('generic food kinds', () => {
       expect(food).toBeDefined();
       if (!food) throw new Error(`Missing generic food: ${id}`);
       expect(food?.kind).toBe('liquid');
-      expect(getAvailableServingUnits(food, food.names.en)).toEqual(['ml', 'cl', 'l']);
+      expect(getAvailableServingUnits(food, food.names.en)).toEqual([
+        'ml',
+        'cl',
+        'dl',
+        'l',
+        'fl_oz',
+        'cup',
+        'tbsp',
+        'tsp',
+        'glass',
+      ]);
     }
   });
 });

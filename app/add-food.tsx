@@ -35,15 +35,19 @@ export default function AddFoodScreen() {
     const name = food.names[language];
     router.push({
       pathname: '/log-food',
-      params: buildLogFoodParams(date, isMeal(meal) ? meal : 'snack', {
-        name,
-        kcal: food.kcal,
-        protein: food.protein,
-        carbs: food.carbs,
-        fat: food.fat,
-        kind: food.kind,
-        servingQuantityG: food.servingQuantityG,
-      }),
+      params: {
+        ...buildLogFoodParams(date, isMeal(meal) ? meal : 'snack', {
+          name,
+          kcal: food.kcal,
+          protein: food.protein,
+          carbs: food.carbs,
+          fat: food.fat,
+          kind: food.kind,
+          servingQuantityG: food.servingQuantityG,
+          source: 'generic',
+        }),
+        productSheet: 'true',
+      },
     });
   }
 

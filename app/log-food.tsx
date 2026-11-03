@@ -1,9 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { MetricRow } from '@/components/metric-row';
+import { ProductNutritionFlow } from '@/components/ProductNutritionFlow';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import {
@@ -12,6 +14,9 @@ import {
   hasUsableNutrition,
   readSingleParam,
   createDiaryEntryValues,
+  addDiaryEntry,
+  diaryQueryKey,
+  diaryFoodHistoryQueryKey,
 } from '@/features/diary';
 import { useDiaryMutations } from '@/features/diary/queries';
 import type { DiaryFood, Meal } from '@/features/diary/types';
@@ -30,6 +35,7 @@ export default function LogFoodScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<Record<string, string | string[]>>();
   const user = useAuthStore((state) => state.user);
+  const queryClient = useQueryClient();
   const date = readSingleParam(params.date) ?? '';
   const mealValue = readSingleParam(params.meal) ?? '';
   const meal = (MEALS as readonly string[]).includes(mealValue) ? (mealValue as Meal) : 'snack';
@@ -42,13 +48,31 @@ export default function LogFoodScreen() {
   const kindParam = readSingleParam(params.kind);
   const kind = kindParam === 'liquid' ? 'liquid' : 'solid';
   const numericParam = (key: string) => Number(readSingleParam(params[key]));
+  const optionalNumericParam = (key: string) => {
+    const value = readSingleParam(params[key]);
+    return value === undefined || value.length === 0 ? undefined : Number(value);
+  };
   const food: DiaryFood = {
     kind,
     name,
+    brand: readSingleParam(params.brand),
+    barcode: readSingleParam(params.barcode),
+    imageUrl: readSingleParam(params.imageUrl),
+    source:
+      readSingleParam(params.source) === 'user'
+        ? 'user'
+        : readSingleParam(params.source) === 'generic'
+          ? 'generic'
+          : 'off',
     kcal: numericParam('kcal'),
     protein: numericParam('protein'),
     carbs: numericParam('carbs'),
     fat: numericParam('fat'),
+    sugars: optionalNumericParam('sugars'),
+    fiber: optionalNumericParam('fiber'),
+    saturatedFat: optionalNumericParam('saturatedFat'),
+    salt: optionalNumericParam('salt'),
+    alcohol: optionalNumericParam('alcohol'),
     ...(Number.isFinite(servingQuantityG) && servingQuantityG > 0 ? { servingQuantityG } : {}),
     ...(Number.isFinite(densityGPerMl) && densityGPerMl > 0
       ? { densityGPerMl }
@@ -86,6 +110,7 @@ export default function LogFoodScreen() {
   const [error, setError] = useState(false);
   const [saving, setSaving] = useState(false);
   const mutations = useDiaryMutations(user?.id ?? '', date);
+  const productSheet = readSingleParam(params.productSheet) === 'true' && !entryId;
   const parsedQuantity = Number(quantity.replace(',', '.'));
   const preview = convertServing(food, parsedQuantity, unit);
   let canSave = false;
@@ -136,6 +161,65 @@ export default function LogFoodScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (productSheet && validFood) {
+    return (
+      <ProductNutritionFlow
+        product={food}
+        destination="diary"
+        initialDate={date || undefined}
+        initialMeal={meal}
+        onDismiss={() => router.back()}
+        onCorrectValues={() =>
+          router.replace({
+            pathname: '/manual-food',
+            params: {
+              correction: 'true',
+              date,
+              meal,
+              name: food.name,
+              brand: food.brand ?? '',
+              barcode: food.barcode ?? '',
+              kcal: String(food.kcal),
+              protein: String(food.protein),
+              carbs: String(food.carbs),
+              fat: String(food.fat),
+              kind,
+              servingQuantityG: String(food.servingQuantityG ?? ''),
+              sugars: String(food.sugars ?? ''),
+              fiber: String(food.fiber ?? ''),
+              saturatedFat: String(food.saturatedFat ?? ''),
+              salt: String(food.salt ?? ''),
+              alcohol: String(food.alcohol ?? ''),
+              productId: food.productId ?? '',
+              imageUrl: food.imageUrl ?? '',
+            },
+          })
+        }
+        onAdd={async ({ quantity: amount, unit: servingUnit, date: selectedDate, meal: selectedMeal }) => {
+          if (!user || !nutritionValid) throw new Error('Diary entry is unavailable.');
+          const values = createDiaryEntryValues({
+            userId: user.id,
+            date: selectedDate,
+            meal: selectedMeal,
+            food,
+            quantity: amount,
+            unit: servingUnit,
+          });
+          await addDiaryEntry(values);
+          void Promise.all([
+            queryClient.invalidateQueries({ queryKey: diaryQueryKey(user.id, selectedDate) }),
+            queryClient.invalidateQueries({
+              queryKey: diaryFoodHistoryQueryKey(user.id, selectedDate),
+            }),
+          ]).catch((error: unknown) => {
+            console.warn('Unable to refresh diary queries after adding a food.', error);
+          });
+          router.back();
+        }}
+      />
+    );
   }
 
   if (!validFood) {
@@ -200,17 +284,20 @@ export default function LogFoodScreen() {
               />
               <MetricRow
                 label={t('diary.calories')}
-                value={`${preview.kcal} ${t('common.units.kcal')}`}
+                value={`${Math.round(preview.kcal)} ${t('common.units.kcal')}`}
               />
               <MetricRow
                 label={t('diary.protein')}
-                value={`${preview.protein} ${t('common.units.g')}`}
+                value={`${preview.protein.toFixed(1)} ${t('common.units.g')}`}
               />
               <MetricRow
                 label={t('diary.carbs')}
-                value={`${preview.carbs} ${t('common.units.g')}`}
+                value={`${preview.carbs.toFixed(1)} ${t('common.units.g')}`}
               />
-              <MetricRow label={t('diary.fat')} value={`${preview.fat} ${t('common.units.g')}`} />
+              <MetricRow
+                label={t('diary.fat')}
+                value={`${preview.fat.toFixed(1)} ${t('common.units.g')}`}
+              />
             </>
           ) : null}
         </View>

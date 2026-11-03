@@ -10,6 +10,10 @@ import { useTranslation } from 'react-i18next';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
+import {
+  ProductNutritionFlow,
+  type ProductFlowProduct,
+} from '@/components/ProductNutritionFlow';
 import { Screen } from '@/components/ui/Screen';
 import { TextField } from '@/components/ui/TextField';
 import { GENERIC_FOODS, searchGenericFoods } from '@/features/generic-foods';
@@ -22,7 +26,6 @@ import {
 } from '@/features/diary';
 import { diaryFoodHistoryQueryKey, diaryQueryKey } from '@/features/diary/queries';
 import { shouldAcceptBarcode, validateManualProduct } from '@/features/food-lookup';
-import type { ParsedProduct } from '@/features/food-lookup';
 import {
   buildMealStore,
   MAX_BUILD_MEAL_ITEMS,
@@ -53,6 +56,12 @@ type ManualValues = {
   protein: string;
   carbs: string;
   fat: string;
+  sugars: string;
+  fiber: string;
+  saturatedFat: string;
+  salt: string;
+  alcohol: string;
+  servingQuantityG: string;
   kind: 'solid' | 'liquid';
 };
 
@@ -62,6 +71,12 @@ const EMPTY_MANUAL: ManualValues = {
   protein: '',
   carbs: '',
   fat: '',
+  sugars: '',
+  fiber: '',
+  saturatedFat: '',
+  salt: '',
+  alcohol: '',
+  servingQuantityG: '',
   kind: 'solid',
 };
 
@@ -74,17 +89,6 @@ function hasNutrition(food: DiaryFood): boolean {
     hasUsableNutrition(food) &&
     [food.kcal, food.protein, food.carbs, food.fat].some((value) => value > 0)
   );
-}
-
-function getDefaultAmount(product: DiaryFood): Amount {
-  const unit: ServingUnit = product.kind === 'liquid' ? 'ml' : 'g';
-  return {
-    quantity:
-      product.servingQuantityG !== undefined && product.servingQuantityG > 0
-        ? String(product.servingQuantityG)
-        : '100',
-    unit,
-  };
 }
 
 function toBasketItem(
@@ -110,10 +114,9 @@ export default function BuildMealScreen() {
   const items = useStore(buildMealStore, (state) => state.items);
   const totals = useStore(buildMealStore, (state) => state.totals());
   const [permission, requestPermission] = useCameraPermissions();
-  const [pendingProduct, setPendingProduct] = useState<ParsedProduct | null>(null);
+  const [pendingProduct, setPendingProduct] = useState<ProductFlowProduct | null>(null);
   const [pendingBarcode, setPendingBarcode] = useState('');
   const [existingItemId, setExistingItemId] = useState<string | null>(null);
-  const [amount, setAmount] = useState<Amount>({ quantity: '100', unit: 'g' });
   const [basketOpen, setBasketOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -136,12 +139,14 @@ export default function BuildMealScreen() {
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const language = i18n.language.startsWith('fr') ? 'fr' : 'en';
   const genericFoods = useMemo(() => searchGenericFoods(search), [search]);
+  const duplicateItem = existingItemId
+    ? items.find((item) => item.id === existingItemId)
+    : undefined;
 
   const resetScanSheet = () => {
     setPendingProduct(null);
     setPendingBarcode('');
     setExistingItemId(null);
-    setChangeExistingAmount(false);
     setErrorKey(null);
   };
 
@@ -173,19 +178,8 @@ export default function BuildMealScreen() {
       }
 
       const product = result.product;
-      const food: DiaryFood = {
-        kind: product.kind,
-        name: product.name,
-        kcal: product.kcal,
-        protein: product.protein,
-        carbs: product.carbs,
-        fat: product.fat,
-        servingQuantityG: product.servingQuantityG,
-        densityGPerMl: product.densityGPerMl,
-      };
       setPendingProduct(product);
       setPendingBarcode(product.barcode);
-      setAmount(getDefaultAmount(food));
       const existing = buildMealStore
         .getState()
         .items.find((item) => item.barcode === product.barcode);
@@ -203,58 +197,41 @@ export default function BuildMealScreen() {
     if (result === 'limit') setErrorKey('buildMeal.limitReached');
   }
 
-  function addScannedProduct() {
+  function addScannedProduct(amount: Amount) {
     if (!pendingProduct) return;
-    const food: DiaryFood = {
-      kind: pendingProduct.kind,
-      name: pendingProduct.name,
-      kcal: pendingProduct.kcal,
-      protein: pendingProduct.protein,
-      carbs: pendingProduct.carbs,
-      fat: pendingProduct.fat,
-      servingQuantityG: pendingProduct.servingQuantityG,
-      densityGPerMl: pendingProduct.densityGPerMl,
-    };
+    const food: DiaryFood = pendingProduct;
+    const quantity = Number(amount.quantity.replace(',', '.'));
     if (!hasNutrition(food)) {
       setErrorKey('diary.nutritionMissing');
-      return;
+      throw new Error('Product nutrition is unavailable.');
     }
-    if (!Number.isFinite(Number(amount.quantity.replace(',', '.')))) {
+    if (!Number.isFinite(quantity)) {
       setErrorKey('buildMeal.invalidAmount');
-      return;
+      throw new Error('Amount is invalid.');
     }
     if (
-      Number(amount.quantity.replace(',', '.')) <= 0 ||
-      Number(amount.quantity.replace(',', '.')) > 10_000 ||
+      quantity <= 0 ||
+      quantity > 10_000 ||
       !getAvailableServingUnits(pendingProduct, pendingProduct.name).includes(amount.unit)
     ) {
       setErrorKey('buildMeal.invalidAmount');
-      return;
+      throw new Error('Amount is invalid.');
     }
 
-    const existing = existingItemId
-      ? buildMealStore.getState().items.find((item) => item.id === existingItemId)
-      : undefined;
-    if (existing && changeExistingAmount) {
-      buildMealStore.getState().updateItem(existing.id, {
-        quantity: Number(amount.quantity.replace(',', '.')),
-        unit: amount.unit,
-      });
-    } else {
-      const addResult = buildMealStore.getState().addItem(
-        toBasketItem(food, amount, {
-          barcode: pendingProduct.barcode,
-          imageUrl: pendingProduct.imageUrl,
-        }),
-      );
-      showLimitIfNeeded(addResult);
-      if (addResult === 'limit') return;
-    }
-    setChangeExistingAmount(false);
+    const addResult = buildMealStore.getState().addItem(
+      toBasketItem(
+        food,
+        { quantity: String(quantity), unit: amount.unit },
+        {
+          ...(pendingProduct.barcode ? { barcode: pendingProduct.barcode } : {}),
+          ...(pendingProduct.imageUrl ? { imageUrl: pendingProduct.imageUrl } : {}),
+        },
+      ),
+    );
+    showLimitIfNeeded(addResult);
+    if (addResult === 'limit') throw new Error('Meal item limit reached.');
     resetScanSheet();
   }
-
-  const [changeExistingAmount, setChangeExistingAmount] = useState(false);
 
   function addGenericFood(food: (typeof GENERIC_FOODS)[number]) {
     setErrorKey(null);
@@ -271,11 +248,13 @@ export default function BuildMealScreen() {
       setErrorKey('diary.nutritionMissing');
       return;
     }
-    showLimitIfNeeded(
-      buildMealStore.getState().addItem(toBasketItem(product, getDefaultAmount(product))),
-    );
+    setPendingProduct({
+      ...product,
+      source: 'generic',
+    });
+    setPendingBarcode('');
+    setExistingItemId(null);
     setSearchOpen(false);
-    setBasketOpen(true);
     setSearch('');
   }
 
@@ -287,6 +266,12 @@ export default function BuildMealScreen() {
       protein: manualValues.protein,
       carbs: manualValues.carbs,
       fat: manualValues.fat,
+      sugars: manualValues.sugars,
+      fiber: manualValues.fiber,
+      saturatedFat: manualValues.saturatedFat,
+      salt: manualValues.salt,
+      alcohol: manualValues.alcohol,
+      servingQuantityG: manualValues.servingQuantityG,
       kind: manualValues.kind,
     });
     if (!validation.ok) {
@@ -297,27 +282,47 @@ export default function BuildMealScreen() {
       setErrorKey('diary.nutritionMissing');
       return;
     }
-    const food: DiaryFood = {
-      kind: validation.product.kind,
-      name: validation.product.name,
-      kcal: validation.product.kcal,
-      protein: validation.product.protein,
-      carbs: validation.product.carbs,
-      fat: validation.product.fat,
-    };
-    const result = buildMealStore
-      .getState()
-      .addItem(
-        toBasketItem(food, getDefaultAmount(food), { barcode: pendingBarcode || undefined }),
-      );
-    if (result === 'limit') {
-      setErrorKey('buildMeal.limitReached');
-      return;
-    }
+    setPendingProduct(validation.product);
+    setExistingItemId(
+      validation.product.barcode
+        ? (buildMealStore
+            .getState()
+            .items.find((item) => item.barcode === validation.product.barcode)?.id ?? null)
+        : null,
+    );
     setManualOpen(false);
-    setBasketOpen(true);
-    resetScanSheet();
     setManualValues(EMPTY_MANUAL);
+  }
+
+  function correctProductValues() {
+    if (!pendingProduct) return;
+    setManualValues({
+      name: pendingProduct.name,
+      kcal: String(pendingProduct.kcal),
+      protein: String(pendingProduct.protein),
+      carbs: String(pendingProduct.carbs),
+      fat: String(pendingProduct.fat),
+      sugars: String(pendingProduct.sugars ?? ''),
+      fiber: String(pendingProduct.fiber ?? ''),
+      saturatedFat: String(pendingProduct.saturatedFat ?? ''),
+      salt: String(pendingProduct.salt ?? ''),
+      alcohol: String(pendingProduct.alcohol ?? ''),
+      servingQuantityG: String(pendingProduct.servingQuantityG ?? ''),
+      kind: pendingProduct.kind ?? 'solid',
+    });
+    setManualOpen(true);
+    setPendingProduct(null);
+  }
+
+  function updateScannedProductAmount(amount: Amount) {
+    if (!existingItemId) return;
+    const quantity = Number(amount.quantity.replace(',', '.'));
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 10_000) {
+      setErrorKey('buildMeal.invalidAmount');
+      throw new Error('Amount is invalid.');
+    }
+    buildMealStore.getState().updateItem(existingItemId, { quantity, unit: amount.unit });
+    resetScanSheet();
   }
 
   async function saveMeal() {
@@ -602,17 +607,52 @@ export default function BuildMealScreen() {
                   </Pressable>
                 ))}
               </View>
-              {(['kcal', 'protein', 'carbs', 'fat'] as const).map((field) => (
+              {(
+                [
+                  'kcal',
+                  'protein',
+                  'carbs',
+                  'fat',
+                  'sugars',
+                  'fiber',
+                  'saturatedFat',
+                  'salt',
+                  'alcohol',
+                ] as const
+              ).map((field) => (
                 <TextField
                   key={field}
                   label={t(
-                    `scan.manualForm.${field === 'kcal' ? 'kcalLabel' : field === 'protein' ? 'proteinLabel' : field === 'carbs' ? 'carbsLabel' : 'fatLabel'}`,
+                    field === 'sugars' ||
+                      field === 'fiber' ||
+                      field === 'saturatedFat' ||
+                      field === 'salt' ||
+                      field === 'alcohol'
+                      ? `diary.productFlow.nutrients.${field}`
+                      : `scan.manualForm.${field === 'kcal' ? 'kcalLabel' : field === 'protein' ? 'proteinLabel' : field === 'carbs' ? 'carbsLabel' : 'fatLabel'}`,
                   )}
                   value={manualValues[field]}
                   onChangeText={(value) => setManualValues((v) => ({ ...v, [field]: value }))}
                   keyboardType="decimal-pad"
                 />
               ))}
+              <TextField
+                label={t(
+                  manualValues.kind === 'liquid'
+                    ? 'scan.manualForm.servingQuantityMlLabel'
+                    : 'scan.manualForm.servingQuantityGLabel',
+                )}
+                value={manualValues.servingQuantityG}
+                onChangeText={(servingQuantityG) =>
+                  setManualValues((values) => ({ ...values, servingQuantityG }))
+                }
+                placeholder={t(
+                  manualValues.kind === 'liquid'
+                    ? 'scan.manualForm.servingQuantityMlPlaceholder'
+                    : 'scan.manualForm.servingQuantityGPlaceholder',
+                )}
+                keyboardType="decimal-pad"
+              />
               {errorKey ? (
                 <Text style={styles.error}>
                   {t(errorKey)}
@@ -671,7 +711,33 @@ export default function BuildMealScreen() {
         </View>
         <Ionicons name="chevron-up" size={24} color={colors.text} />
       </Pressable>
-      {pendingProduct || pendingBarcode ? (
+      {pendingProduct && hasNutrition(pendingProduct) ? (
+        <ProductNutritionFlow
+          product={pendingProduct}
+          destination="meal"
+          onDismiss={resetScanSheet}
+          onCorrectValues={correctProductValues}
+          onAdd={async ({ quantity, unit }) =>
+            addScannedProduct({ quantity: String(quantity), unit })
+          }
+          addErrorKey={
+            errorKey === 'buildMeal.limitReached' || errorKey === 'buildMeal.invalidAmount'
+              ? errorKey
+              : undefined
+          }
+          duplicate={
+            duplicateItem
+              ? {
+                  message: t('buildMeal.duplicatePrompt'),
+                  quantity: duplicateItem.quantity,
+                  unit: duplicateItem.unit,
+                  onUpdate: async ({ quantity, unit }) =>
+                    updateScannedProductAmount({ quantity: String(quantity), unit }),
+                }
+              : undefined
+          }
+        />
+      ) : pendingProduct || pendingBarcode ? (
         <View style={styles.bottomSheet}>
           {pendingProduct?.imageUrl ? (
             <Image
@@ -684,68 +750,24 @@ export default function BuildMealScreen() {
           {errorKey ? (
             <Text style={styles.error}>{t(errorKey)}</Text>
           ) : null}
-          {pendingProduct && hasNutrition(pendingProduct) ? (
-            <>
-              {existingItemId && !changeExistingAmount ? (
-                <Text style={styles.copy}>{t('buildMeal.duplicatePrompt')}</Text>
-              ) : null}
-              <TextInput
-                accessibilityLabel={t('buildMeal.amount')}
-                keyboardType="decimal-pad"
-                value={amount.quantity}
-                onChangeText={(quantity) => setAmount((current) => ({ ...current, quantity }))}
-                style={styles.quantityInput}
-              />
-              <View style={styles.wrapRow}>
-                {getAvailableServingUnits(pendingProduct, pendingProduct.name).map((unit) => (
-                  <Pressable
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: amount.unit === unit }}
-                    key={unit}
-                    onPress={() => setAmount((current) => ({ ...current, unit }))}
-                    style={[styles.choice, amount.unit === unit ? styles.selectedChoice : null]}
-                  >
-                    <Text style={styles.choiceText}>{t(`common.units.${unit}`)}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              {existingItemId && !changeExistingAmount ? (
-                <View style={styles.sheetActions}>
-                  <Button
-                    label={t('buildMeal.addAgain')}
-                    onPress={() => {
-                      setChangeExistingAmount(false);
-                      addScannedProduct();
-                    }}
-                  />
-                  <Button
-                    label={t('buildMeal.changeAmount')}
-                    variant="secondary"
-                    onPress={() => {
-                      const existing = items.find((item) => item.id === existingItemId);
-                      if (existing)
-                        setAmount({ quantity: String(existing.quantity), unit: existing.unit });
-                      setChangeExistingAmount(true);
-                    }}
-                  />
-                </View>
-              ) : (
-                <Button
-                  label={t(changeExistingAmount ? 'buildMeal.updateAmount' : 'buildMeal.addToMeal')}
-                  disabled={items.length >= MAX_BUILD_MEAL_ITEMS && !changeExistingAmount}
-                  onPress={addScannedProduct}
-                />
-              )}
-            </>
-          ) : (
+          {pendingProduct && !hasNutrition(pendingProduct) ? (
             <Button
               label={t('buildMeal.openManualForm')}
               onPress={() => {
-                setManualValues(EMPTY_MANUAL);
+                setManualValues({
+                  ...EMPTY_MANUAL,
+                  name: pendingProduct.name,
+                  kcal: String(pendingProduct.kcal),
+                  protein: String(pendingProduct.protein),
+                  carbs: String(pendingProduct.carbs),
+                  fat: String(pendingProduct.fat),
+                  kind: pendingProduct.kind ?? 'solid',
+                });
+                setPendingProduct(null);
                 setManualOpen(true);
               }}
             />
-          )}
+          ) : null}
           <Button label={t('common.cancel')} variant="secondary" onPress={resetScanSheet} />
         </View>
       ) : null}

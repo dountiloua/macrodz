@@ -1,7 +1,13 @@
 import { describe, expect, it } from '@jest/globals';
 
 import { SERVING_UNITS, type ServingUnit } from '../constants';
-import { convertServing, getAvailableServingUnits } from '../convert';
+import {
+  convertServing,
+  getAvailableServingUnits,
+  getCalculatorUnits,
+  getEquivalentAmounts,
+  getEquivalentUnits,
+} from '../convert';
 import { getProductDensityGPerMl, PRODUCT_DENSITIES_G_PER_ML } from '../density';
 import type { ServingConversionResult, ServingConversionSuccess, ServingProduct } from '../types';
 
@@ -60,26 +66,33 @@ describe('convertServing', () => {
   });
 
   describe('mass and volume conversions', () => {
-    it('converts cl and l to millilitres without applying density for liquids', () => {
-      expect(expectSuccess(convertServing(liquid, 1, 'cl'))).toEqual({
-        ok: true,
-        grams: 10,
-        kcal: 6,
-        protein: 0.3,
-        carbs: 0.5,
-        fat: 0.4,
-      });
+    it('converts volume units to millilitres without applying density for liquids', () => {
+      const centiliters = expectSuccess(convertServing(liquid, 1, 'cl'));
+      expect(centiliters.grams).toBe(10);
+      expect(centiliters.kcal).toBeCloseTo(6.4);
+      expect(centiliters.protein).toBeCloseTo(0.34);
+      expect(centiliters.carbs).toBeCloseTo(0.48);
+      expect(centiliters.fat).toBeCloseTo(0.36);
       expect(expectSuccess(convertServing(liquid, 1, 'l')).grams).toBe(1000);
+      expect(expectSuccess(convertServing(liquid, 1, 'dl')).grams).toBe(100);
+      expect(expectSuccess(convertServing(liquid, 1, 'fl_oz')).grams).toBeCloseTo(29.5735);
     });
 
     it('rejects units unavailable for each product kind', () => {
-      for (const unit of ['g', 'unit', 'pot', 'tbsp', 'tsp', 'cup', 'glass'] as const) {
+      for (const unit of [
+        'g',
+        'kg',
+        'oz',
+        'unit',
+        'pot',
+        'serving',
+      ] as const) {
         expect(convertServing(liquid, 100, unit)).toEqual({
           ok: false,
           error: 'UNIT_NOT_AVAILABLE',
         });
       }
-      for (const unit of ['cl', 'l'] as const) {
+      for (const unit of ['cl', 'dl', 'l', 'fl_oz'] as const) {
         expect(convertServing({ ...milk, kind: 'solid' }, 1, unit)).toEqual({
           ok: false,
           error: 'UNIT_NOT_AVAILABLE',
@@ -88,30 +101,28 @@ describe('convertServing', () => {
     });
 
     it('converts grams directly without using density', () => {
-      expect(expectSuccess(convertServing(milk, 150, 'g'))).toEqual({
-        ok: true,
-        grams: 150,
-        kcal: 96,
-        protein: 5.1,
-        carbs: 7.2,
-        fat: 5.4,
-      });
+      const result = expectSuccess(convertServing(milk, 150, 'g'));
+      expect(result.grams).toBe(150);
+      expect(result.kcal).toBe(96);
+      expect(result.protein).toBeCloseTo(5.1);
+      expect(result.carbs).toBeCloseTo(7.2);
+      expect(result.fat).toBeCloseTo(5.4);
     });
 
     it('uses density for milliliters', () => {
       const result = expectSuccess(convertServing(oil, 100, 'ml'));
 
       expect(result.grams).toBe(92);
-      expect(result.kcal).toBe(813);
+      expect(result.kcal).toBeCloseTo(813.28);
       expect(result.fat).toBe(92);
     });
 
-    it('defaults density to 1 when it is not provided', () => {
+    it('does not assume a density for a solid with unknown density', () => {
       const water: ServingProduct = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
-      const result = expectSuccess(convertServing(water, 250, 'ml'));
-
-      expect(result.grams).toBe(250);
-      expect(result.kcal).toBe(0);
+      expect(convertServing(water, 250, 'ml')).toEqual({
+        ok: false,
+        error: 'INVALID_PRODUCT',
+      });
     });
 
     it('applies the configured tablespoon, teaspoon, glass and cup sizes', () => {
@@ -123,27 +134,104 @@ describe('convertServing', () => {
       expect(tablespoon.grams).toBe(13.8);
       expect(teaspoons.grams).toBe(13.8);
       expect(cup).toEqual(glass);
-      expect(cup.grams).toBe(247.2);
+      expect(cup.grams).toBeCloseTo(247.2);
+      expect(tablespoon.kcal).toBeCloseTo(121.992);
     });
   });
 
   describe('hand-checked examples', () => {
+    it('matches hand-calculated liquid calorie totals in every requested volume unit', () => {
+      const juice: ServingProduct = {
+        kind: 'liquid',
+        kcal: 42,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+      };
+
+      expect(expectSuccess(convertServing(juice, 250, 'ml')).kcal).toBe(105);
+      expect(expectSuccess(convertServing(juice, 1.5, 'dl')).kcal).toBe(63);
+      expect(expectSuccess(convertServing(juice, 2, 'cup')).kcal).toBeCloseTo(201.6);
+      expect(expectSuccess(convertServing(juice, 0.33, 'l')).kcal).toBeCloseTo(138.6);
+    });
+
+    it('matches hand-calculated solid calorie totals in g and kg', () => {
+      const product: ServingProduct = {
+        kind: 'solid',
+        kcal: 520,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+      };
+
+      expect(expectSuccess(convertServing(product, 37, 'g')).kcal).toBe(192.4);
+      expect(expectSuccess(convertServing(product, 0.5, 'kg')).kcal).toBe(2600);
+    });
+
+    it('round-trips each equivalent amount without changing the base quantity', () => {
+      const liquidProduct: ServingProduct = {
+        ...liquid,
+        kcal: 42,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+      };
+      const solidProduct: ServingProduct = {
+        ...oil,
+        name: 'Olive oil',
+        kind: 'solid',
+        servingQuantityG: 13,
+      };
+
+      for (const [product, baseUnit, baseAmount] of [
+        [liquidProduct, 'ml', 123.45],
+        [solidProduct, 'g', 30],
+      ] as const) {
+        const equivalents = getEquivalentAmounts(product, baseAmount, baseUnit);
+        expect(equivalents.map((entry) => entry.unit)).toEqual(
+          getEquivalentUnits(product),
+        );
+        for (const equivalent of equivalents) {
+          expect(
+            expectSuccess(convertServing(product, equivalent.quantity, equivalent.unit)).grams,
+          ).toBeCloseTo(baseAmount, 8);
+
+          const reverseEquivalents = getEquivalentAmounts(
+            product,
+            equivalent.quantity,
+            equivalent.unit,
+          );
+          expect(reverseEquivalents.map((entry) => entry.unit)).toEqual(
+            getEquivalentUnits(product),
+          );
+          for (const reverse of reverseEquivalents) {
+            expect(
+              expectSuccess(convertServing(product, reverse.quantity, reverse.unit)).grams,
+            ).toBeCloseTo(baseAmount, 8);
+          }
+        }
+      }
+    });
+
+    it('offers the calculator units required for each product kind', () => {
+      expect(getCalculatorUnits(liquid)).toEqual(['ml', 'cl', 'dl', 'l']);
+      expect(getCalculatorUnits(yogurtPot)).toEqual(['g', 'kg', 'oz', 'unit']);
+    });
+
     it('converts 2 glasses of milk', () => {
-      expect(expectSuccess(convertServing(milk, 2, 'glass'))).toEqual({
-        ok: true,
-        grams: 494.4,
-        kcal: 316,
-        protein: 16.8,
-        carbs: 23.7,
-        fat: 17.8,
-      });
+      const result = expectSuccess(convertServing(milk, 2, 'glass'));
+      expect(result.grams).toBeCloseTo(494.4);
+      expect(result.kcal).toBeCloseTo(316.416);
+      expect(result.protein).toBeCloseTo(16.8096);
+      expect(result.carbs).toBeCloseTo(23.7312);
+      expect(result.fat).toBeCloseTo(17.7984);
     });
 
     it('converts 1 tablespoon of oil', () => {
       expect(expectSuccess(convertServing(oil, 1, 'tbsp'))).toEqual({
         ok: true,
         grams: 13.8,
-        kcal: 122,
+        kcal: 121.992,
         protein: 0,
         carbs: 0,
         fat: 13.8,
@@ -155,9 +243,9 @@ describe('convertServing', () => {
         ok: true,
         grams: 125,
         kcal: 75,
-        protein: 4.4,
-        carbs: 8.8,
-        fat: 1.9,
+        protein: 4.375,
+        carbs: 8.75,
+        fat: 1.875,
       });
     });
   });
@@ -240,22 +328,22 @@ describe('convertServing', () => {
     });
   });
 
-  describe('rounding', () => {
-    it('rounds kcal to a whole number and macros to one decimal', () => {
+  describe('precision', () => {
+    it('retains full kcal and macro precision internally', () => {
       const result = expectSuccess(convertServing(milk, 2, 'glass'));
 
-      expect(Number.isInteger(result.kcal)).toBe(true);
-      expect(result.protein).toBe(16.8);
-      expect(result.carbs).toBe(23.7);
-      expect(result.fat).toBe(17.8);
+      expect(result.kcal).toBe(316.416);
+      expect(result.protein).toBeCloseTo(16.8096);
+      expect(result.carbs).toBeCloseTo(23.7312);
+      expect(result.fat).toBeCloseTo(17.7984);
     });
 
     it('never returns NaN for any supported unit', () => {
       for (const unit of SERVING_UNITS) {
         const product =
-          unit === 'cl' || unit === 'l'
+          unit === 'cl' || unit === 'dl' || unit === 'l' || unit === 'fl_oz'
             ? liquid
-            : unit === 'unit' || unit === 'pot'
+            : unit === 'unit' || unit === 'pot' || unit === 'serving'
               ? yogurtPot
               : milk;
         const result = convertServing(product, 1, unit);
@@ -279,18 +367,18 @@ describe('convertServing', () => {
   });
 
   describe('getAvailableServingUnits', () => {
-    it('includes unit and pot when product has valid servingQuantityG', () => {
+    it('includes a serving unit when product has valid servingQuantityG', () => {
       const units = getAvailableServingUnits(yogurtPot);
       expect(units).toContain('unit');
-      expect(units).toContain('pot');
-      expect(units).toEqual(SERVING_UNITS.filter((unit) => unit !== 'cl' && unit !== 'l'));
+      expect(units).not.toContain('pot');
+      expect(units).toEqual(['g', 'kg', 'oz', 'unit']);
     });
 
-    it('excludes unit and pot when servingQuantityG is undefined', () => {
+    it('excludes serving units when servingQuantityG is undefined', () => {
       const units = getAvailableServingUnits(milk);
       expect(units).not.toContain('unit');
       expect(units).not.toContain('pot');
-      expect(units).toEqual(['g', 'ml', 'tbsp', 'tsp', 'glass', 'cup']);
+      expect(units).toEqual(['g', 'kg', 'oz', 'ml', 'tbsp', 'tsp', 'glass', 'cup']);
     });
 
     it('excludes unit and pot when servingQuantityG is zero or negative', () => {
@@ -317,8 +405,18 @@ describe('convertServing', () => {
       expect(units).toContain('g');
     });
 
-    it('offers only ml, cl, and l for liquids', () => {
-      expect(getAvailableServingUnits(liquid)).toEqual(['ml', 'cl', 'l']);
+    it('offers the supported volume units for liquids', () => {
+      expect(getAvailableServingUnits(liquid)).toEqual([
+        'ml',
+        'cl',
+        'dl',
+        'l',
+        'fl_oz',
+        'cup',
+        'tbsp',
+        'tsp',
+        'glass',
+      ]);
     });
 
     it('allows volume units for solids when a density is explicitly provided', () => {

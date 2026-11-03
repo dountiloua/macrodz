@@ -19,6 +19,11 @@ export function buildManualProductForm(currentBarcode: string, existingProduct?:
     protein: existingProduct?.protein ?? '',
     carbs: existingProduct?.carbs ?? '',
     fat: existingProduct?.fat ?? '',
+    sugars: existingProduct?.sugars ?? '',
+    fiber: existingProduct?.fiber ?? '',
+    saturatedFat: existingProduct?.saturatedFat ?? '',
+    salt: existingProduct?.salt ?? '',
+    alcohol: existingProduct?.alcohol ?? '',
     kind: existingProduct?.kind ?? 'solid',
     servingQuantityG: existingProduct?.servingQuantityG ?? '',
   };

@@ -1,4 +1,3 @@
-import { roundTo } from '@/lib/math';
 import type { ProductKind } from '../serving-units';
 
 import { getDefaultCache } from './lookup';
@@ -16,6 +15,11 @@ export type ManualProductInput = {
   protein: string | number;
   carbs: string | number;
   fat: string | number;
+  sugars?: string | number;
+  fiber?: string | number;
+  saturatedFat?: string | number;
+  salt?: string | number;
+  alcohol?: string | number;
   servingQuantityG?: string | number;
 };
 
@@ -25,6 +29,11 @@ export type ManualProductValidationErrors = {
   protein?: 'REQUIRED' | 'INVALID_NUMBER';
   carbs?: 'REQUIRED' | 'INVALID_NUMBER';
   fat?: 'REQUIRED' | 'INVALID_NUMBER';
+  sugars?: 'INVALID_NUMBER';
+  fiber?: 'INVALID_NUMBER';
+  saturatedFat?: 'INVALID_NUMBER';
+  salt?: 'INVALID_NUMBER';
+  alcohol?: 'INVALID_NUMBER';
   servingQuantityG?: 'INVALID_NUMBER';
   macrosSum?: 'MACROS_EXCEED_100';
 };
@@ -90,13 +99,36 @@ export function validateManualProduct(input: ManualProductInput): ManualProductV
     errors.fat = 'INVALID_NUMBER';
   }
 
+  const optionalNutrients = {
+    sugars: parseLocalizedNumber(input.sugars),
+    fiber: parseLocalizedNumber(input.fiber),
+    saturatedFat: parseLocalizedNumber(input.saturatedFat),
+    salt: parseLocalizedNumber(input.salt),
+    alcohol: parseLocalizedNumber(input.alcohol),
+  };
+  if (optionalNutrients.sugars !== null && optionalNutrients.sugars < 0) {
+    errors.sugars = 'INVALID_NUMBER';
+  }
+  if (optionalNutrients.fiber !== null && optionalNutrients.fiber < 0) {
+    errors.fiber = 'INVALID_NUMBER';
+  }
+  if (optionalNutrients.saturatedFat !== null && optionalNutrients.saturatedFat < 0) {
+    errors.saturatedFat = 'INVALID_NUMBER';
+  }
+  if (optionalNutrients.salt !== null && optionalNutrients.salt < 0) {
+    errors.salt = 'INVALID_NUMBER';
+  }
+  if (optionalNutrients.alcohol !== null && optionalNutrients.alcohol < 0) {
+    errors.alcohol = 'INVALID_NUMBER';
+  }
+
   let servingQuantityG: number | undefined;
   if (input.servingQuantityG !== undefined && String(input.servingQuantityG).trim().length > 0) {
     const rawServing = parseLocalizedNumber(input.servingQuantityG);
     if (rawServing === null || rawServing <= 0) {
       errors.servingQuantityG = 'INVALID_NUMBER';
     } else {
-      servingQuantityG = roundTo(rawServing, 1);
+      servingQuantityG = rawServing;
     }
   }
 
@@ -120,10 +152,17 @@ export function validateManualProduct(input: ManualProductInput): ManualProductV
     barcode,
     name,
     brand: brand && brand.length > 0 ? brand : undefined,
-    kcal: Math.round(rawKcal!),
-    protein: roundTo(rawProtein!, 1),
-    carbs: roundTo(rawCarbs!, 1),
-    fat: roundTo(rawFat!, 1),
+    kcal: rawKcal!,
+    protein: rawProtein!,
+    carbs: rawCarbs!,
+    fat: rawFat!,
+    ...(optionalNutrients.sugars === null ? {} : { sugars: optionalNutrients.sugars }),
+    ...(optionalNutrients.fiber === null ? {} : { fiber: optionalNutrients.fiber }),
+    ...(optionalNutrients.saturatedFat === null
+      ? {}
+      : { saturatedFat: optionalNutrients.saturatedFat }),
+    ...(optionalNutrients.salt === null ? {} : { salt: optionalNutrients.salt }),
+    ...(optionalNutrients.alcohol === null ? {} : { alcohol: optionalNutrients.alcohol }),
     servingQuantityG,
     servingSize: servingQuantityG
       ? `${servingQuantityG} ${kind === 'liquid' ? 'ml' : 'g'}`

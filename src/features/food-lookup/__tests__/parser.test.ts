@@ -93,7 +93,6 @@ describe('parseOpenFoodFactsProduct', () => {
         fat_100ml: 0.3,
       },
     });
-
     expect(product).toMatchObject({
       kind: 'liquid',
       kcal: 42,
@@ -101,6 +100,89 @@ describe('parseOpenFoodFactsProduct', () => {
       carbs: 5.4,
       fat: 0.3,
     });
+  });
+
+  it('keeps full precision and parses optional solid nutrients', () => {
+    const product = expectProduct({
+      nutriments: {
+        'energy-kcal_100g': 64.25,
+        proteins_100g: 3.456,
+        carbohydrates_100g: 4.812,
+        fat_100g: 3.625,
+        sugars_100g: 2.34,
+        fiber_100g: 1.27,
+        'saturated-fat_100g': 0.81,
+        salt_100g: 0.42,
+      },
+    });
+
+    expect(product).toMatchObject({
+      kcal: 64.25,
+      protein: 3.456,
+      carbs: 4.812,
+      fat: 3.625,
+      sugars: 2.34,
+      fiber: 1.27,
+      saturatedFat: 0.81,
+      salt: 0.42,
+    });
+  });
+
+  it('parses liquid extras per 100 ml and falls back from sodium to salt', () => {
+    const product = expectProduct({
+      product_name: 'Fruit drink',
+      quantity: '1 l',
+      nutriments: {
+        'energy-kcal_100ml': 42,
+        proteins_100ml: 0.5,
+        carbohydrates_100ml: 9.5,
+        fat_100ml: 0.1,
+        sugars_100ml: 8.25,
+        fiber_100ml: 0.2,
+        'saturated-fat_100ml': 0.03,
+        sodium_100ml: 0.12,
+        alcohol_100ml: 0.4,
+      },
+    });
+
+    expect(product).toMatchObject({
+      kind: 'liquid',
+      sugars: 8.25,
+      fiber: 0.2,
+      saturatedFat: 0.03,
+      salt: 0.3,
+      alcohol: 0.4,
+    });
+  });
+
+  it('does not interpret per-100g nutrients as per-100ml for liquids', () => {
+    const result = parseOpenFoodFactsProduct(
+      {
+        product_name: 'Drink',
+        quantity: '500 ml',
+        nutriments: {
+          'energy-kcal_100g': 42,
+          proteins_100g: 1,
+          carbohydrates_100g: 8,
+          fat_100g: 0.1,
+        },
+      },
+      ALGERIAN_BARCODE,
+    );
+
+    expect(result).toEqual({ ok: false, error: { code: 'INCOMPLETE_DATA' } });
+  });
+
+  it('prefers salt over sodium when both are available', () => {
+    const product = expectProduct({
+      nutriments: {
+        ...normalRaw.nutriments,
+        salt_100g: 0.8,
+        sodium_100g: 0.2,
+      },
+    });
+
+    expect(product.salt).toBe(0.8);
   });
 
   it('resolves the product name using the documented fallback order', () => {
@@ -194,7 +276,7 @@ describe('parseOpenFoodFactsProduct', () => {
       },
     });
 
-    expect(product.kcal).toBe(239);
+    expect(product.kcal).toBeCloseTo(239.0057, 3);
   });
 
   it('converts per-serving values to per-100g', () => {

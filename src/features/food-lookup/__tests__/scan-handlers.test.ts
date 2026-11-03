@@ -40,6 +40,11 @@ describe('scan handlers', () => {
       protein: 0,
       carbs: 0,
       fat: 100,
+      sugars: '',
+      fiber: '',
+      saturatedFat: '',
+      salt: '',
+      alcohol: '',
       kind: 'solid',
       servingQuantityG: '',
     });

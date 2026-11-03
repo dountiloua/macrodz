@@ -1,4 +1,5 @@
 import type { DiaryFoodHistorySnapshot } from '@/features/diary/types';
+import { isDiaryEntryLiquid } from '@/features/diary/nutrition';
 import type { GenericFood } from '@/features/generic-foods';
 
 import type { CloseMacrosFoodCandidate } from './types';
@@ -54,8 +55,7 @@ export function createHistoryFoodCandidates(
     const aggregate = grouped.get(key) ?? {
       name,
       grams: 0,
-      kind:
-        entry.unit === 'ml' || entry.unit === 'cl' || entry.unit === 'l' ? 'liquid' : 'solid',
+      kind: isDiaryEntryLiquid(entry) ? 'liquid' : 'solid',
       kcal: 0,
       protein: 0,
       carbs: 0,

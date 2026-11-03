@@ -1,5 +1,4 @@
 import { NUTRIENT_BASIS_G } from '../serving-units/constants';
-import { roundTo } from '@/lib/math';
 import type { ProductKind } from '../serving-units/types';
 import type { OpenFoodFactsRawProduct, ParseResult, ParsedProduct } from './types';
 
@@ -143,8 +142,9 @@ function resolveNutrient(
   kind: ProductKind,
 ): number | null {
   const per100 =
-    (kind === 'liquid' ? readNutriment(nutriments, per100MlKey) : null) ??
-    readNutriment(nutriments, per100Key);
+    kind === 'liquid'
+      ? readNutriment(nutriments, per100MlKey)
+      : readNutriment(nutriments, per100Key);
 
   if (per100 !== null) {
     return per100;
@@ -158,23 +158,44 @@ function resolveKcal(
   servingQuantityG: number | null,
   kind: ProductKind,
 ): number | null {
-  const kcal =
-    (kind === 'liquid' ? readNutriment(nutriments, 'energy-kcal_100ml') : null) ??
-    readNutriment(nutriments, 'energy-kcal_100g');
+  const kcal = readNutriment(
+    nutriments,
+    kind === 'liquid' ? 'energy-kcal_100ml' : 'energy-kcal_100g',
+  );
 
   if (kcal !== null) {
     return kcal;
   }
 
-  const kilojoules =
-    (kind === 'liquid' ? readNutriment(nutriments, 'energy_100ml') : null) ??
-    readNutriment(nutriments, 'energy_100g');
+  const kilojoules = readNutriment(
+    nutriments,
+    kind === 'liquid' ? 'energy_100ml' : 'energy_100g',
+  );
 
   if (kilojoules !== null) {
     return kilojoules / KJ_PER_KCAL;
   }
 
   return per100FromServing(nutriments, 'energy-kcal_serving', servingQuantityG);
+}
+
+function resolveOptionalNutrient(
+  nutriments: Record<string, unknown> | undefined,
+  per100Key: string,
+  per100MlKey: string,
+  perServingKey: string,
+  servingQuantityG: number | null,
+  kind: ProductKind,
+): number | undefined {
+  const value = resolveNutrient(
+    nutriments,
+    per100Key,
+    per100MlKey,
+    perServingKey,
+    servingQuantityG,
+    kind,
+  );
+  return value !== null && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 export function parseOpenFoodFactsProduct(
@@ -220,6 +241,58 @@ export function parseOpenFoodFactsProduct(
     servingQuantityG,
     kind,
   );
+  const sugars = resolveOptionalNutrient(
+    nutriments,
+    'sugars_100g',
+    'sugars_100ml',
+    'sugars_serving',
+    servingQuantityG,
+    kind,
+  );
+  const fiber = resolveOptionalNutrient(
+    nutriments,
+    'fiber_100g',
+    'fiber_100ml',
+    'fiber_serving',
+    servingQuantityG,
+    kind,
+  );
+  const saturatedFat = resolveOptionalNutrient(
+    nutriments,
+    'saturated-fat_100g',
+    'saturated-fat_100ml',
+    'saturated-fat_serving',
+    servingQuantityG,
+    kind,
+  );
+  const salt =
+    resolveOptionalNutrient(
+      nutriments,
+      'salt_100g',
+      'salt_100ml',
+      'salt_serving',
+      servingQuantityG,
+      kind,
+    ) ??
+    (() => {
+      const sodium = resolveOptionalNutrient(
+        nutriments,
+        'sodium_100g',
+        'sodium_100ml',
+        'sodium_serving',
+        servingQuantityG,
+        kind,
+      );
+      return sodium === undefined ? undefined : sodium * 2.5;
+    })();
+  const alcohol = resolveOptionalNutrient(
+    nutriments,
+    'alcohol_100g',
+    'alcohol_100ml',
+    'alcohol_serving',
+    servingQuantityG,
+    kind,
+  );
 
   if (kcal === null || protein === null || carbs === null || fat === null) {
     return { ok: false, error: { code: 'INCOMPLETE_DATA' } };
@@ -252,10 +325,15 @@ export function parseOpenFoodFactsProduct(
     barcode,
     name,
     ...(imageUrl ? { imageUrl } : {}),
-    kcal: Math.round(kcal),
-    protein: roundTo(protein, 1),
-    carbs: roundTo(carbs, 1),
-    fat: roundTo(fat, 1),
+    kcal,
+    protein,
+    carbs,
+    fat,
+    ...(sugars === undefined ? {} : { sugars }),
+    ...(fiber === undefined ? {} : { fiber }),
+    ...(saturatedFat === undefined ? {} : { saturatedFat }),
+    ...(salt === undefined ? {} : { salt }),
+    ...(alcohol === undefined ? {} : { alcohol }),
     servingQuantityG: servingQuantityG ?? undefined,
     brand: brand.length > 0 ? brand : undefined,
     servingSize: servingSize.length > 0 ? servingSize : undefined,

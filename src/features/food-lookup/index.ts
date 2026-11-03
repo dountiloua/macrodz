@@ -31,6 +31,7 @@ export type {
   ManualProductValidationResult,
 } from './manual-product';
 export { classifyProductKind, parseOpenFoodFactsProduct, parseServingSizeG } from './parser';
+export { hasInconsistentCalories } from './nutrition-accuracy';
 export { DEFAULT_SCAN_COOLDOWN_MS, shouldAcceptBarcode } from './scan-throttle';
 export {
   buildManualProductForm,

@@ -26,6 +26,7 @@ export {
   getLogFoodUnitOptions,
   getNutritionPer100g,
   hasUsableNutrition,
+  isDiaryEntryLiquid,
 } from './nutrition';
 export { MEALS } from './types';
 export type {
